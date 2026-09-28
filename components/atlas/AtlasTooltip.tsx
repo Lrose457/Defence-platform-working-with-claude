@@ -45,9 +45,20 @@ export default function AtlasTooltip({
         </p>
         <p>
           <span className="text-slate-500">Conflicts: </span>
-          {conflicts.length === 0
-            ? "None tracked"
-            : conflicts.slice(0, 3).map((c) => c.name).join(", ")}
+          {conflicts.length === 0 ? (
+            "None tracked"
+          ) : (
+            <span>
+              {conflicts.slice(0, 3).map((c, i) => (
+                <span key={c.conflict_id}>
+                  {i > 0 ? ", " : ""}
+                  {c.name}
+                  {c.intensity_level != null ? ` (L${c.intensity_level})` : ""}
+                </span>
+              ))}
+              {conflicts.length > 3 ? ` +${conflicts.length - 3}` : ""}
+            </span>
+          )}
         </p>
       </div>
       <Link

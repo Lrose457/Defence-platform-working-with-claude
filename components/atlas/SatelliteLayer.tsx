@@ -36,6 +36,33 @@ function roleColor(role: string | undefined): string {
 interface PropagatedSat extends AtlasSatellite {
   satrec: ReturnType<typeof satellite.twoline2satrec>;
   color: string;
+  /** Upcoming ground track (lng/lat pairs), sampled every minute. */
+  trail: [number, number][];
+}
+
+const TRAIL_MINUTES = 95; // ~one LEO orbit; GEO sats will trace a short arc
+const TRAIL_STEP_MINUTES = 1.5;
+
+/** Precompute the upcoming ground track for one object. */
+function computeTrail(satrec: ReturnType<typeof satellite.twoline2satrec>): [number, number][] {
+  const trail: [number, number][] = [];
+  const start = Date.now();
+  for (let m = 0; m <= TRAIL_MINUTES; m += TRAIL_STEP_MINUTES) {
+    try {
+      const date = new Date(start + m * 60_000);
+      const pv = satellite.propagate(satrec, date);
+      const pos = pv?.position;
+      if (!pos || typeof pos === "boolean") continue;
+      const gd = satellite.eciToGeodetic(pos, satellite.gstime(date));
+      const lat = satellite.degreesLat(gd.latitude);
+      const lng = satellite.degreesLong(gd.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      trail.push([lng, lat]);
+    } catch {
+      /* skip un-propagatable sample */
+    }
+  }
+  return trail;
 }
 
 export default function SatelliteLayer({
@@ -76,6 +103,7 @@ export default function SatelliteLayer({
           country: sat.country ?? "Unattributed",
           iso3: sat.iso3 ?? "",
           color: roleColor(role),
+          trail: computeTrail(satrec),
         });
       } catch {
         /* Malformed TLE — skip the object. */
@@ -139,6 +167,29 @@ export default function SatelliteLayer({
 
   return (
     <g>
+      {/* Ground tracks: one faint polyline per object, drawn beneath markers. */}
+      {sats?.map((sat) => {
+        if (sat.trail.length < 2) return null;
+          const d = sat.trail
+            .map(([lng, lat], i) => {
+              const xy = projection([lng, lat]);
+              return xy ? `${i === 0 ? "M" : "L"}${xy[0].toFixed(1)},${xy[1].toFixed(1)}` : null;
+            })
+            .filter((seg): seg is string => seg !== null)
+            .join("");
+          if (!d) return null;
+          return (
+            <path
+              key={`trail-${sat.line1.slice(2, 7)}`}
+              d={d}
+              fill="none"
+              stroke={sat.color}
+              strokeOpacity={0.18}
+              strokeWidth={0.7 / zoom}
+              pointerEvents="none"
+            />
+          );
+        })}
       {points.map(({ sat, x, y }) => (
         <circle
           key={`${sat.line1.slice(2, 7)}`}

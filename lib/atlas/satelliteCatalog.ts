@@ -19,24 +19,8 @@ export interface SatelliteAttribution {
   patterns: RegExp[];
 }
 
-/** CelesTrak group slug → curator comment shown in the UI. */
-export const GROUP_LABELS: Record<string, string> = {
-  military: "US military & early-warning",
-  "military-geo": "US military geodetic",
-  "military-radar": "US military radar calibration",
-  "military-weather": "US military weather (DMSP)",
-  recon: "Reconnaissance (multi-national)",
-  geo: "Geostationary belt (comms/early-warning)",
-  weather: "Civil & military weather",
-  stations: "Crewed stations",
-  starlink: "Starlink (commercial — context only)",
-};
-
 export const SATELLITE_GROUPS = [
   "military",
-  "military-geo",
-  "military-radar",
-  "military-weather",
   "recon",
   "geo",
   "weather",

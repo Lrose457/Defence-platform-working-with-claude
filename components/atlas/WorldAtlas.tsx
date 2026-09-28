@@ -63,6 +63,7 @@ export default function WorldAtlas({
   const [hover, setHover] = useState<{ jf: JoinedFeature; x: number; y: number } | null>(null);
   const [showSatellites, setShowSatellites] = useState(true);
   const [showInstallations, setShowInstallations] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   /* ── Data joins (all derived from props — nothing hardcoded) ── */
 
@@ -98,6 +99,19 @@ export default function WorldAtlas({
   const maxBudget = useMemo(
     () => Math.max(...budgets.map((b) => b.amount_usd ?? 0), 1),
     [budgets],
+  );
+
+  const installationTypes = useMemo(
+    () => [...new Set(installations.map((i) => i.type))].sort(),
+    [installations],
+  );
+
+  const filteredInstallations = useMemo(
+    () =>
+      typeFilter === "all"
+        ? installations
+        : installations.filter((i) => i.type === typeFilter),
+    [installations, typeFilter],
   );
 
   const track = useCallback(
@@ -215,6 +229,22 @@ export default function WorldAtlas({
         >
           ⚓ Installations {showInstallations ? "ON" : "OFF"}
         </button>
+        {showInstallations && installationTypes.length > 0 && (
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            aria-label="Filter installations by type"
+            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-slate-300"
+          >
+            <option value="all">All types ({installations.length})</option>
+            {installationTypes.map((t) => (
+              <option key={t} value={t}>
+                {t.replaceAll("_", " ")} (
+                {installations.filter((i) => i.type === t).length})
+              </option>
+            ))}
+          </select>
+        )}
         <span className="text-slate-500">
           Hover for intelligence · click to open profile · scroll to zoom · drag to pan
         </span>
@@ -282,7 +312,7 @@ export default function WorldAtlas({
 
             {showInstallations && (
               <InstallationLayer
-                installations={installations}
+                installations={filteredInstallations}
                 projection={projection}
                 zoom={transform.k}
                 onHover={(inst, x, y) => {
