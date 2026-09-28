@@ -3,7 +3,6 @@ import "./globals.css";
 import Link from "next/link";
 import AppearanceSettings from "@/components/AppearanceSettings";
 import UserSurvey from "@/components/UserSurvey";
-import StockTickerWidget from "@/components/StockTickerWidget";
 import { getCsrfToken } from "@/lib/security/csrf";
 
 export const metadata: Metadata = {
@@ -41,6 +40,7 @@ export default async function RootLayout({
               <div className="space-y-4">
                 <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Core Intelligence</p>
                 <div className="space-y-1">
+                  <Link href="/map" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Global Atlas</Link>
                   <Link href="/" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Dashboard</Link>
                   <Link href="/countries" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Countries</Link>
                   <Link href="/companies" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Companies</Link>
@@ -55,15 +55,11 @@ export default async function RootLayout({
                 <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Strategic Analysis</p>
                 <div className="space-y-1">
                   <Link href="/analytics" className="block py-1 px-2 rounded text-blue-400 hover:text-white hover:bg-blue-900/30 transition-all font-medium">Financial Analytics</Link>
-                  <Link href="/stocks" className="block py-1 px-2 rounded text-cyan-400 hover:text-white hover:bg-cyan-900/30 transition-all font-medium">Market Ticker</Link>
                   <Link href="/analytics/corruption" className="block py-1 px-2 rounded text-red-400 hover:text-white hover:bg-red-900/30 transition-all font-medium">Corruption Index</Link>
                   <Link href="/conflict-tracker" className="block py-1 px-2 rounded text-red-400 hover:text-red-300 hover:bg-red-900/20 transition-all font-medium">Conflict Tracker</Link>
-                  <Link href="/legislation" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Legislation</Link>
                   <Link href="/intelligence" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Intelligence Feed</Link>
                   <Link href="/artificial-intelligence" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">AI in Defence</Link>
-                  <Link href="/space" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Space Capability</Link>
                   <Link href="/analysis/alignment" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Alignment Model</Link>
-                  <Link href="/programmes/sdr" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Defence Reviews</Link>
                   <Link href="/investigations" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Investigations</Link>
                   <Link href="/compare" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Benchmarks</Link>
                 </div>
@@ -124,8 +120,6 @@ export default async function RootLayout({
             </footer>
           </main>
 
-          {/* Corner stock ticker widget — client-only, dismissible for 24h */}
-          <StockTickerWidget />
         </div>
       </body>
     </html>

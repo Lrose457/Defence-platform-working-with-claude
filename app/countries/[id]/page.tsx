@@ -117,13 +117,17 @@ export default async function CountryProfile({
       .limit(12),
   ]);
 
-  /* Legislation tab (doc: link the legislative pipeline to the profile). */
+  /* Legislation tab (doc: link the legislative pipeline to the profile).
+   * defence_review rows double as the country's "future projects" feed. */
   const { data: legislation } = await supabase
     .from("legislation_pipeline")
-    .select("id, title, stage, expected_date")
+    .select("id, title, stage, expected_date, kind")
     .eq("country_id", countryId)
     .order("expected_date", { ascending: true, nullsFirst: false })
-    .limit(6);
+    .limit(12);
+
+  const futureProjects = (legislation ?? []).filter((l) => l.kind === "defence_review");
+  const legislationItems = (legislation ?? []).filter((l) => l.kind !== "defence_review").slice(0, 6);
 
   const contracts = contractsResult.data ?? [];
   const latestBudget = budgetsResult.data?.[0] ?? null;
@@ -376,6 +380,38 @@ export default async function CountryProfile({
               </Link>
             </section>
           )}
+          {futureProjects.length > 0 && (
+            <section className="rounded border border-slate-800 bg-slate-900/50 p-4">
+              <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300">
+                Future projects
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Defence reviews and forward-looking programmes shaping this
+                country&apos;s force design.
+              </p>
+              <ul className="mt-3 divide-y divide-slate-800">
+                {futureProjects.map((proj) => (
+                  <li key={proj.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+                    <Link
+                      href={`/programmes/sdr`}
+                      className="text-slate-200 hover:text-blue-400"
+                    >
+                      {proj.title}
+                    </Link>
+                    <span className="text-[10px] font-mono uppercase text-slate-500">
+                      {proj.stage ?? "—"} · {proj.expected_date ?? "date n/a"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/programmes/sdr"
+                className="mt-2 inline-block text-xs text-blue-500 hover:text-blue-400"
+              >
+                All future projects →
+              </Link>
+            </section>
+          )}
           <section className="rounded border border-slate-800 bg-slate-900/50 p-4">
             <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300">
               Legislation
@@ -383,11 +419,11 @@ export default async function CountryProfile({
             <p className="mt-1 text-xs text-slate-500">
               Latest items from the legislative pipeline touching this country.
             </p>
-            {(legislation ?? []).length === 0 ? (
+            {legislationItems.length === 0 ? (
               <p className="mt-3 text-xs text-slate-500">No tracked legislation for this country yet.</p>
             ) : (
               <ul className="mt-3 divide-y divide-slate-800">
-                {(legislation ?? []).map((leg) => (
+                {legislationItems.map((leg) => (
                   <li key={leg.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
                     <Link
                       href={`/legislation?country=${countryId}`}
