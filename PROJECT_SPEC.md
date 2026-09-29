@@ -1,12 +1,13 @@
 Defence Intelligence Platform
 
 Purpose:
-Track defence spending, military contracts, defence companies, equipment exports and conflict usage.
+Track global defence spending, contracts, defence companies, equipment exports and conflict usage.
 
 Users:
 Journalists
 Researchers
-OSINT analysts
+OSINT Analysts
+Think Tanks
 
 Entities:
 Countries
@@ -18,7 +19,7 @@ Exports
 Conflicts
 
 Design:
-Bloomberg-style
-Dark mode
+Bloomberg Terminal style
+Dark Mode
 Professional
-Data-focused
+Data Focused

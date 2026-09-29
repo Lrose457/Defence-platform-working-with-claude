@@ -1,0 +1,70 @@
+update public.countries
+set region = case name
+  when 'Afghanistan, Islamic Republic of' then 'Asia'
+  when 'Albania' then 'Europe'
+  when 'Algeria' then 'Africa'
+  when 'Andorra, Principality of' then 'Europe'
+  when 'Angola' then 'Africa'
+  when 'Antigua and Barbuda' then 'North America'
+  when 'Argentina' then 'South America'
+  when 'Armenia, Republic of' then 'Asia'
+  when 'Aruba, Kingdom of the Netherlands' then 'North America'
+  when 'Austria' then 'Europe'
+  when 'Azerbaijan, Republic of' then 'Asia'
+  when 'Bahamas, The' then 'North America'
+  when 'Bahrain, Kingdom of' then 'Middle East'
+  when 'Bangladesh' then 'Asia'
+  when 'Barbados' then 'North America'
+  when 'Belarus, Republic of' then 'Europe'
+  when 'Belgium' then 'Europe'
+  when 'Belize' then 'North America'
+  when 'Benin' then 'Africa'
+  when 'Bhutan' then 'Asia'
+  when 'Bolivia' then 'South America'
+  when 'Bosnia and Herzegovina' then 'Europe'
+  when 'Botswana' then 'Africa'
+  when 'Brazil' then 'South America'
+  when 'Brunei Darussalam' then 'Asia'
+  when 'Bulgaria' then 'Europe'
+  when 'Burkina Faso' then 'Africa'
+  when 'Burundi' then 'Africa'
+  when 'Cabo Verde' then 'Africa'
+  when 'Cambodia' then 'Asia'
+  when 'Cameroon' then 'Africa'
+  when 'Central African Republic' then 'Africa'
+end
+where (region is null or lower(region) = 'unspecified')
+  and name in (
+    'Afghanistan, Islamic Republic of',
+    'Albania',
+    'Algeria',
+    'Andorra, Principality of',
+    'Angola',
+    'Antigua and Barbuda',
+    'Argentina',
+    'Armenia, Republic of'
+    , 'Aruba, Kingdom of the Netherlands'
+    , 'Austria'
+    , 'Azerbaijan, Republic of'
+    , 'Bahamas, The'
+    , 'Bahrain, Kingdom of'
+    , 'Bangladesh'
+    , 'Barbados'
+    , 'Belarus, Republic of'
+    , 'Belgium'
+    , 'Belize'
+    , 'Benin'
+    , 'Bhutan'
+    , 'Bolivia'
+    , 'Bosnia and Herzegovina'
+    , 'Botswana'
+    , 'Brazil'
+    , 'Brunei Darussalam'
+    , 'Bulgaria'
+    , 'Burkina Faso'
+    , 'Burundi'
+    , 'Cabo Verde'
+    , 'Cambodia'
+    , 'Cameroon'
+    , 'Central African Republic'
+  );

@@ -1,0 +1,91 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+
+export default async function IntelligenceDashboard() {
+  const supabase = await createClient();
+
+  const [
+    { count: changeCount },
+    { count: procurementCount },
+    { count: highChangeCount },
+    { count: countryCount },
+  ] = await Promise.all([
+    supabase
+      .from("data_changes")
+      .select("*", { count: "exact", head: true })
+      .eq("intelligence_eligible", true),
+
+    supabase
+      .from("procurement_events")
+      .select("*", { count: "exact", head: true }),
+
+    supabase
+      .from("data_changes")
+      .select("*", { count: "exact", head: true })
+      .eq("intelligence_eligible", true)
+      .eq("importance", "high"),
+
+    supabase
+      .from("countries")
+      .select("*", { count: "exact", head: true }),
+  ]);
+
+  const cards = [
+    {
+      label: "Countries",
+      value: countryCount ?? 0,
+      href: "/countries",
+    },
+    {
+      label: "Intelligence changes",
+      value: changeCount ?? 0,
+      href: "/changes",
+    },
+    {
+      label: "High-importance changes",
+      value: highChangeCount ?? 0,
+      href: "/changes?importance=high",
+    },
+    {
+      label: "Procurement events",
+      value: procurementCount ?? 0,
+      href: "/procurement",
+    },
+  ];
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">
+          Platform intelligence
+        </p>
+
+        <h2 className="mt-2 text-xl font-semibold">
+          Intelligence overview
+        </h2>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {cards.map((card) => (
+          <Link
+            key={card.label}
+            href={card.href}
+            className="rounded-lg border border-slate-800 bg-slate-950 p-5 transition hover:border-slate-600"
+          >
+            <p className="text-xs uppercase tracking-wide text-slate-600">
+              {card.label}
+            </p>
+
+            <p className="mt-3 text-2xl font-semibold">
+              {card.value.toLocaleString()}
+            </p>
+
+            <p className="mt-2 text-xs text-sky-400">
+              Explore →
+            </p>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}

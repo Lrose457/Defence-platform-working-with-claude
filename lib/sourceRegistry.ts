@@ -1,0 +1,486 @@
+export type SourceAccess = "Live" | "API key" | "Licensed" | "Research";
+export type SourceCategory =
+  | "Procurement"
+  | "Ownership and sanctions"
+  | "Conflict and deployment"
+  | "Investigations"
+  | "Movement and logistics"
+  | "Defence research";
+
+export type IntelligenceSource = {
+  id: string;
+  name: string;
+  publisher: string;
+  category: SourceCategory;
+  access: SourceAccess;
+  url: string;
+  integration: string;
+  value: string;
+  requiresCredentials?: boolean;
+  credentialEnvVars?: string[];
+  adapterStatus?: "ready" | "requires-credentials" | "manual-review";
+};
+
+export const intelligenceSources: IntelligenceSource[] = [
+  {
+    id: "gleif",
+    name: "GLEIF Level 2",
+    publisher: "Global Legal Entity Identifier Foundation",
+    category: "Ownership and sanctions",
+    access: "Live",
+    url: "https://www.gleif.org/en/lei-data/gleif-golden-copy",
+    integration: "Existing Neo4j relationship importer",
+    value: "Parent, subsidiary, and legal-entity relationships",
+    adapterStatus: "ready",
+  },
+  {
+    id: "usaspending",
+    name: "USAspending",
+    publisher: "US government",
+    category: "Procurement",
+    access: "Live",
+    url: "https://www.usaspending.gov/",
+    integration: "Public API; no key required",
+    value: "Federal awards, recipients, agencies, amounts, and locations",
+    adapterStatus: "ready",
+  },
+  {
+    id: "sam-gov",
+    name: "SAM.gov",
+    publisher: "US government",
+    category: "Procurement",
+    access: "Live",
+    url: "https://sam.gov/content/opportunities",
+    integration: "Public contract opportunities and award notices",
+    value: "Solicitations, vendors, contract notices, and set-asides",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "uk-contracts-finder",
+    name: "Contracts Finder",
+    publisher: "UK government",
+    category: "Procurement",
+    access: "Live",
+    url: "https://www.contractsfinder.service.gov.uk/",
+    integration: "Public search and downloadable procurement records",
+    value: "UK public contracts, suppliers, values, and notices",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "eu-ted",
+    name: "TED",
+    publisher: "European Union",
+    category: "Procurement",
+    access: "Live",
+    url: "https://ted.europa.eu/",
+    integration: "Public procurement notices and API catalogue",
+    value: "European tenders, awards, buyers, suppliers, and values",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "ofac",
+    name: "OFAC Sanctions",
+    publisher: "US Treasury",
+    category: "Ownership and sanctions",
+    access: "Live",
+    url: "https://ofac.treasury.gov/sanctions-programs-and-country-information",
+    integration: "Public SDN and consolidated list downloads",
+    value: "Designated people, companies, aliases, and jurisdictions",
+    adapterStatus: "ready",
+  },
+  {
+    id: "uk-sanctions",
+    name: "UK Sanctions List",
+    publisher: "UK government",
+    category: "Ownership and sanctions",
+    access: "Live",
+    url: "https://www.gov.uk/government/publications/the-uk-sanctions-list",
+    integration: "Public downloadable list",
+    value: "UK designations, aliases, and legal bases",
+    adapterStatus: "ready",
+  },
+  {
+    id: "eu-sanctions",
+    name: "EU Sanctions Map",
+    publisher: "European Union",
+    category: "Ownership and sanctions",
+    access: "Live",
+    url: "https://www.sanctionsmap.eu/",
+    integration: "Public catalogue and legal acts",
+    value: "EU restrictive measures and designated entities",
+    adapterStatus: "ready",
+  },
+  {
+    id: "un-sanctions",
+    name: "UN Security Council Sanctions",
+    publisher: "United Nations",
+    category: "Ownership and sanctions",
+    access: "Live",
+    url: "https://main.un.org/securitycouncil/en/content/un-sc-consolidated-list",
+    integration: "Public consolidated list",
+    value: "International sanctions and designation records",
+    adapterStatus: "ready",
+  },
+  {
+    id: "opensanctions",
+    name: "OpenSanctions",
+    publisher: "OpenSanctions",
+    category: "Ownership and sanctions",
+    access: "API key",
+    url: "https://www.opensanctions.org/",
+    integration: "API or licensed dataset; configure credentials before use",
+    value: "Cross-jurisdiction entity resolution and sanctions links",
+    requiresCredentials: true,
+    credentialEnvVars: ["OPENSANCTIONS_API_KEY"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "opencorporates",
+    name: "OpenCorporates",
+    publisher: "OpenCorporates",
+    category: "Ownership and sanctions",
+    access: "API key",
+    url: "https://opencorporates.com/",
+    integration: "API key and usage limits apply",
+    value: "Corporate registrations, officers, and jurisdiction records",
+    requiresCredentials: true,
+    credentialEnvVars: ["OPENCORPORATES_API_KEY"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "companies-house",
+    name: "Companies House",
+    publisher: "UK government",
+    category: "Ownership and sanctions",
+    access: "API key",
+    url: "https://developer.company-information.service.gov.uk/",
+    integration: "Free API key required",
+    value: "UK officers, filings, persons with significant control",
+    requiresCredentials: true,
+    credentialEnvVars: ["COMPANIES_HOUSE_API_KEY"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "acled",
+    name: "ACLED",
+    publisher: "Armed Conflict Location & Event Data",
+    category: "Conflict and deployment",
+    access: "API key",
+    url: "https://acleddata.com/",
+    integration: "Account and API access required",
+    value: "Geolocated conflict events and named actors",
+    requiresCredentials: true,
+    credentialEnvVars: ["ACLED_API_KEY"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "ucdp",
+    name: "UCDP",
+    publisher: "Uppsala Conflict Data Program",
+    category: "Conflict and deployment",
+    access: "Live",
+    url: "https://ucdp.uu.se/",
+    integration: "Public datasets and API catalogue",
+    value: "Conflict events, actors, fatalities, and geographic scope",
+    adapterStatus: "ready",
+  },
+  {
+    id: "un-mercenaries",
+    name: "UN Working Group on Mercenaries",
+    publisher: "United Nations OHCHR",
+    category: "Conflict and deployment",
+    access: "Research",
+    url: "https://www.ohchr.org/en/special-procedures/wg-mercenaries",
+    integration: "Reports and country communications require document extraction",
+    value: "Official findings on mercenaries and private military actors",
+  },
+  {
+    id: "bellingcat",
+    name: "Bellingcat",
+    publisher: "Bellingcat",
+    category: "Investigations",
+    access: "Research",
+    url: "https://www.bellingcat.com/",
+    integration: "Curated research; do not scrape without permission",
+    value: "Open-source investigations, geolocation, and network links",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "occrp",
+    name: "OCCRP and Aleph",
+    publisher: "Organized Crime and Corruption Reporting Project",
+    category: "Investigations",
+    access: "Research",
+    url: "https://aleph.occrp.org/",
+    integration: "Public research platform with terms and rate limits",
+    value: "Leaks, corporate records, contracts, and financial networks",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "c4ads",
+    name: "C4ADS",
+    publisher: "Center for Advanced Defense Studies",
+    category: "Investigations",
+    access: "Research",
+    url: "https://c4ads.org/",
+    integration: "Published reports and selected datasets",
+    value: "Illicit finance, logistics, and transnational networks",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "crisis-group",
+    name: "International Crisis Group",
+    publisher: "Crisis Group",
+    category: "Conflict and deployment",
+    access: "Research",
+    url: "https://www.crisisgroup.org/",
+    integration: "Published analysis and situation reports",
+    value: "Conflict actors, political control, and regional context",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "iss-africa",
+    name: "Institute for Security Studies",
+    publisher: "ISS Africa",
+    category: "Conflict and deployment",
+    access: "Research",
+    url: "https://issafrica.org/",
+    integration: "Published research and reports",
+    value: "African security actors, conflict, and governance",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "africa-center",
+    name: "Africa Center for Strategic Studies",
+    publisher: "National Defense University",
+    category: "Conflict and deployment",
+    access: "Research",
+    url: "https://africacenter.org/",
+    integration: "Published research and datasets where available",
+    value: "African security, armed groups, and conflict trends",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "sentry",
+    name: "The Sentry",
+    publisher: "The Sentry",
+    category: "Investigations",
+    access: "Research",
+    url: "https://thesentry.org/",
+    integration: "Published investigations and reports",
+    value: "Conflict finance, sanctions evasion, and extractive networks",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "rusi",
+    name: "RUSI",
+    publisher: "Royal United Services Institute",
+    category: "Defence research",
+    access: "Research",
+    url: "https://www.rusi.org/",
+    integration: "Published research and reports",
+    value: "Defence policy, private military actors, and security networks",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "war-on-rocks",
+    name: "War on the Rocks",
+    publisher: "War on the Rocks",
+    category: "Defence research",
+    access: "Research",
+    url: "https://warontherocks.com/",
+    integration: "Published analysis",
+    value: "Defence strategy, operations, and security policy context",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "dfrlab",
+    name: "DFRLab",
+    publisher: "Atlantic Council",
+    category: "Investigations",
+    access: "Research",
+    url: "https://dfrlab.org/",
+    integration: "Published OSINT research",
+    value: "Disinformation, digital evidence, and conflict networks",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "opensky",
+    name: "OpenSky Network",
+    publisher: "OpenSky Network",
+    category: "Movement and logistics",
+    access: "Live",
+    url: "https://opensky-network.org/",
+    integration: "Public API with rate limits",
+    value: "Aircraft positions and historical flight data",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "adsb-exchange",
+    name: "ADS-B Exchange",
+    publisher: "ADS-B Exchange",
+    category: "Movement and logistics",
+    access: "Research",
+    url: "https://globe.adsbexchange.com/",
+    integration: "Use published access methods and terms",
+    value: "Unfiltered aircraft tracking and flight context",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "flightradar24",
+    name: "Flightradar24",
+    publisher: "Flightradar24",
+    category: "Movement and logistics",
+    access: "Licensed",
+    url: "https://www.flightradar24.com/",
+    integration: "Commercial access and redistribution terms",
+    value: "Aircraft tracking and flight history",
+    requiresCredentials: true,
+    credentialEnvVars: ["FLIGHTRADAR24_API_KEY"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "marinetraffic",
+    name: "MarineTraffic",
+    publisher: "Kpler",
+    category: "Movement and logistics",
+    access: "Licensed",
+    url: "https://www.marinetraffic.com/",
+    integration: "Commercial API subscription required",
+    value: "Vessel identity, positions, ports, and voyage history",
+    requiresCredentials: true,
+    credentialEnvVars: ["MARINETRAFFIC_API_KEY"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "vesselfinder",
+    name: "VesselFinder",
+    publisher: "VesselFinder",
+    category: "Movement and logistics",
+    access: "Licensed",
+    url: "https://www.vesselfinder.com/",
+    integration: "Commercial API access required",
+    value: "AIS vessel positions, identities, and port calls",
+    requiresCredentials: true,
+    credentialEnvVars: ["VESSELFINDER_API_KEY"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "satellite-imagery",
+    name: "Satellite imagery providers",
+    publisher: "Planet, Maxar, and Sentinel Hub",
+    category: "Movement and logistics",
+    access: "Licensed",
+    url: "https://www.sentinel-hub.com/",
+    integration: "Provider accounts, quotas, and imagery licences required",
+    value: "Independent visual confirmation of facilities and logistics activity",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "sipri",
+    name: "SIPRI",
+    publisher: "Stockholm International Peace Research Institute",
+    category: "Defence research",
+    access: "Research",
+    url: "https://www.sipri.org/databases",
+    integration: "Public datasets with attribution and usage conditions",
+    value: "Arms transfers, military expenditure, and industry research",
+    adapterStatus: "ready",
+  },
+  {
+    id: "iiss",
+    name: "IISS Military Balance",
+    publisher: "International Institute for Strategic Studies",
+    category: "Defence research",
+    access: "Licensed",
+    url: "https://www.iiss.org/publications/the-military-balance/",
+    integration: "Subscription or licensed data access",
+    value: "Force structure, capabilities, and defence assessments",
+    requiresCredentials: true,
+    credentialEnvVars: ["IISS_API_KEY", "IISS_SUBSCRIPTION"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "janes",
+    name: "Janes",
+    publisher: "Janes Group",
+    category: "Defence research",
+    access: "Licensed",
+    url: "https://www.janes.com/",
+    integration: "Commercial subscription and redistribution terms",
+    value: "Professional defence intelligence and equipment data",
+    requiresCredentials: true,
+    credentialEnvVars: ["JANES_API_KEY"],
+    adapterStatus: "requires-credentials",
+  },
+  {
+    id: "csis",
+    name: "CSIS",
+    publisher: "Center for Strategic and International Studies",
+    category: "Defence research",
+    access: "Research",
+    url: "https://www.csis.org/",
+    integration: "Published research, reports, and datasets",
+    value: "Strategic analysis, security actors, and defence economics",
+    adapterStatus: "manual-review",
+  },
+  {
+    id: "wdmma",
+    name: "WDMMA",
+    publisher: "WDMMA.org (World Directory of Modern Military Aircraft)",
+    category: "Defence research",
+    access: "Live",
+    url: "https://www.wdmma.org/",
+    integration: "Public HTML pages; data-pipeline/scripts/scrape_wdmma.py",
+    value: "Per-air-service aircraft inventories, category breakdowns, and on-order totals",
+    adapterStatus: "ready",
+  },
+  {
+    id: "rand",
+    name: "RAND",
+    publisher: "RAND Corporation",
+    category: "Defence research",
+    access: "Research",
+    url: "https://www.rand.org/",
+    integration: "Published research and reports",
+    value: "Defence policy, operations, and institutional analysis",
+    adapterStatus: "manual-review",
+  },
+];
+
+const sourceById = new Map(
+  intelligenceSources.map((source) => [source.id, source]),
+);
+
+export function getIntelligenceSource(sourceId: string) {
+  return sourceById.get(sourceId) ?? null;
+}
+
+export function getLiveIntelligenceSources() {
+  return intelligenceSources.filter((source) => source.access === "Live");
+}
+
+/**
+ * Live sources whose ingestion adapter is ready or requires credentials
+ * (i.e. has an adapter in the data pipeline).
+ *
+ * Sources with `adapterStatus: "manual-review"` have no programmable
+ * adapter and would need manual ingestion steps — callers that need
+ * guaranteed live ingestion should use this filtered list.
+ */
+export function getLiveIngestedIntelligenceSources() {
+  return getLiveIntelligenceSources().filter(
+    (source) =>
+      source.adapterStatus === "ready" ||
+      source.adapterStatus === "requires-credentials",
+  );
+}
+
+export function getCredentialedIntelligenceSources() {
+  return intelligenceSources.filter(
+    (source) =>
+      source.access === "API key" ||
+      source.access === "Licensed" ||
+      Boolean(source.requiresCredentials),
+  );
+}

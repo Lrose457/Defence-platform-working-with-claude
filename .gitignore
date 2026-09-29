@@ -20,9 +20,17 @@
 # production
 /build
 
+# Stray credential files (must never be committed)
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+
 # misc
 .DS_Store
 *.pem
+
+# editor configs (user-specific)
+.cursor/
+.vscode/
 
 # debug
 npm-debug.log*
@@ -32,6 +40,25 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+
+# python
+__pycache__/
+*.py[cod]
+
+# data-pipeline
+# Cached HTML from the WDMMA scraper. This is a politeness cache so re-runs do
+# not re-request the site; it is regenerable and must not be committed.
+data-pipeline/data/wdmma_cache/
+
+# Raw ingested datasets are multi-GB and regenerable — only curated payloads
+# used for ingestion replay are kept in git.
+data-pipeline/data/*
+!data-pipeline/data/hiik_2025_ingestion_payload.json
+!data-pipeline/data/hiik_2025_conflicts.csv
+!data-pipeline/data/navbase_fleetlist.json
+
+# Local Supabase CLI binary (vendored, 41 MB, machine-specific)
+/supabase-cli
 
 # vercel
 .vercel
