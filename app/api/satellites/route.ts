@@ -2,16 +2,11 @@ import { type NextRequest, NextResponse } from "next/server";
 import { rateLimit, requestKey } from "@/lib/security/rateLimit";
 import { validateBearerToken } from "@/lib/security/csrf";
 import { SATELLITE_GROUPS, attribute } from "@/lib/atlas/satelliteCatalog";
-
-interface TleRecord {
-  name: string;
-  line1: string;
-  line2: string;
-  group: string;
-  country: string;
-  iso3: string;
-  role: string;
-}
+import {
+  getCache,
+  setCache,
+  type TleRecord,
+} from "@/lib/atlas/tleCache";
 
 function enrich(r: Omit<TleRecord, "country" | "iso3" | "role">): TleRecord {
   const a = attribute(r.name);
@@ -39,7 +34,6 @@ function enrich(r: Omit<TleRecord, "country" | "iso3" | "role">): TleRecord {
  * `GET /api/satellites?refresh=1` with the bearer header).
  */
 const CACHE_MS = 6 * 60 * 60 * 1000;
-let cache: { data: TleRecord[]; timestamp: number } | null = null;
 
 async function fetchGroup(group: string): Promise<TleRecord[]> {
   const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(group)}&FORMAT=tle`;
@@ -79,6 +73,7 @@ export async function GET(request: NextRequest) {
     request.nextUrl.searchParams.get("refresh") === "1" &&
     validateBearerToken(request);
 
+  const cache = getCache();
   if (!forceRefresh && cache && Date.now() - cache.timestamp < CACHE_MS) {
     return NextResponse.json({ ...cache, cached: true });
   }
@@ -96,11 +91,12 @@ export async function GET(request: NextRequest) {
     if (data.length === 0) {
       throw new Error("CelesTrak returned no TLE data for any group");
     }
-    cache = { data, timestamp: Date.now() };
-    return NextResponse.json({ ...cache, cached: false });
+    const fresh = setCache(data);
+    return NextResponse.json({ ...fresh, cached: false });
   } catch (error) {
-    if (cache) {
-      return NextResponse.json({ ...cache, cached: true, stale: true });
+    const stale = getCache();
+    if (stale) {
+      return NextResponse.json({ ...stale, cached: true, stale: true });
     }
     console.error("[satellites] CelesTrak fetch failed:", error);
     return NextResponse.json(
