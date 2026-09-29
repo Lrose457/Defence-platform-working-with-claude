@@ -10,7 +10,11 @@ import { useState } from "react";
 import type { GeoProjection } from "d3-geo";
 import type { AtlasInstallation } from "@/components/atlas/atlasData";
 
-const TYPE_STYLE: Record<string, { color: string; glyph: string; label: string }> = {
+/** Marker style per installation type; shared with WorldAtlas's legend. */
+export const INSTALLATION_TYPE_STYLE: Record<
+  string,
+  { color: string; glyph: string; label: string }
+> = {
   airfield: { color: "#f59e0b", glyph: "✈", label: "Airfield" },
   naval_base: { color: "#38bdf8", glyph: "⚓", label: "Naval base" },
   army_base: { color: "#4ade80", glyph: "▲", label: "Army base" },
@@ -19,6 +23,8 @@ const TYPE_STYLE: Record<string, { color: string; glyph: string; label: string }
   radar: { color: "#a78bfa", glyph: "◉", label: "Radar" },
   other: { color: "#94a3b8", glyph: "●", label: "Other" },
 };
+
+const TYPE_STYLE = INSTALLATION_TYPE_STYLE;
 
 export default function InstallationLayer({
   installations,

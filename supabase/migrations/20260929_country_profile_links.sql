@@ -79,7 +79,9 @@ select
 from public.country_force_structure f
 left join public.equipment e on e.id = f.equipment_id
 left join (
-  select country_id, equipment_id, sum(coalesce(quantity, operational_qty, 0)) as total
+  -- Only quantity is assumed; operational/maintenance splits exist on
+  -- newer schemas but are not required for the held total.
+  select country_id, equipment_id, sum(quantity) as total
   from public.country_equipment
   group by country_id, equipment_id
 ) held on held.country_id = f.country_id and held.equipment_id = f.equipment_id;
@@ -277,8 +279,12 @@ join public.countries c on c.id = s.country_id
 left join public.sources src on src.id = s.source_id;
 
 -- ---------------------------------------------------------------------------
--- Helper: resolve a country id from ISO-2 / ISO-3
+-- Helper: resolve a country id from ISO-2 / ISO-3.
+-- Adds iso_code_2 only if the column is missing (older schemas).
 -- ---------------------------------------------------------------------------
+alter table public.countries
+  add column if not exists iso_code_2 text;
+
 create or replace function public.country_id_from_iso(p_iso text)
 returns bigint
 language sql
@@ -323,7 +329,7 @@ select
   public.country_id_from_iso('GB'),
   'Global Combat Air Programme — sixth-generation combat aircraft developed jointly by the United Kingdom, Italy and Japan (Tempest / GCAP).',
   'in_development',
-  (select id from public.sources where registry_id = 'sipri' limit 1)
+  (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 where public.country_id_from_iso('GB') is not null
   and not exists (select 1 from public.programmes where name = 'GCAP');
 
@@ -333,7 +339,7 @@ select
   public.country_id_from_iso('AU'),
   'Trilateral Australia–United Kingdom–United States partnership covering conventionally armed, nuclear-powered submarines (Pillar I) and advanced capabilities (Pillar II).',
   'active',
-  (select id from public.sources where registry_id = 'sipri' limit 1)
+  (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 where public.country_id_from_iso('AU') is not null
   and not exists (select 1 from public.programmes where name = 'AUKUS');
 
@@ -417,7 +423,7 @@ where rows.country_id is not null
 -- 8. Seed: market alignment (qualitative, SIPRI/government attributed)
 -- ---------------------------------------------------------------------------
 insert into public.country_market_alignment (country_id, bloc, relationship, share_percent, source_id)
-select cid, bloc, relationship, share_percent, (select id from public.sources where registry_id = 'sipri' limit 1)
+select cid, bloc, relationship, share_percent, (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 from (
   values
     (public.country_id_from_iso('PL'), 'NATO / United States', 'primary_supplier', null::numeric),
@@ -448,7 +454,7 @@ select
   null,
   null,
   null,
-  (select id from public.sources where registry_id = 'sipri' limit 1)
+  (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 where public.country_id_from_iso('GB') is not null
   and not exists (
     select 1 from public.country_force_structure
@@ -465,7 +471,7 @@ select
   'regular_force',
   1,
   73847,
-  (select id from public.sources where registry_id = 'sipri' limit 1)
+  (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 where public.country_id_from_iso('GB') is not null
   and not exists (
     select 1 from public.country_force_structure
@@ -482,7 +488,7 @@ select
   'division',
   10,
   null,
-  (select id from public.sources where registry_id = 'sipri' limit 1)
+  (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 where public.country_id_from_iso('US') is not null
   and not exists (
     select 1 from public.country_force_structure
@@ -499,7 +505,7 @@ select
   'space_force',
   1,
   8600,
-  (select id from public.sources where registry_id = 'sipri' limit 1)
+  (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 where public.country_id_from_iso('US') is not null
   and not exists (
     select 1 from public.country_force_structure
@@ -523,7 +529,7 @@ where f.country_id = public.country_id_from_iso('GB')
 -- ---------------------------------------------------------------------------
 insert into public.budgets (country_id, year, amount, amount_usd, currency, is_estimate, source_id)
 select cid, year, amount_usd, amount_usd, 'USD', is_estimate,
-  (select id from public.sources where registry_id = 'sipri' limit 1)
+  (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 from (
   values
     (public.country_id_from_iso('US'), 2022, 876943000000::numeric, false),
@@ -548,7 +554,7 @@ where b.cid is not null
 -- 11. Seed: a few domestic contractors if missing
 -- ---------------------------------------------------------------------------
 insert into public.companies (name, country_id, sector, company_type, description)
-select v.name, v.cid, v.sector, 'prime', v.description
+select v.name, v.cid, v.sector, 'Prime contractor', v.description
 from (
   values
     ('BAE Systems', public.country_id_from_iso('GB'), 'Aerospace', 'UK-headquartered defence prime; GCAP industrial partner.'),
@@ -568,7 +574,7 @@ insert into public.country_space_capabilities (
   country_id, domain, status, summary, source_url, evidence_level, source_id
 )
 select cid, domain, status, summary, source_url, 'reported',
-  (select id from public.sources where registry_id = 'sipri' limit 1)
+  (select id from public.sources where publisher ilike '%Stockholm International Peace Research%' or title ilike '%Military Expenditure Database%' order by id limit 1)
 from (
   values
     (public.country_id_from_iso('US'), 'space_force', 'operational',

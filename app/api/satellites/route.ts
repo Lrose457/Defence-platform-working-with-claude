@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { rateLimit, requestKey } from "@/lib/security/rateLimit";
+import { validateBearerToken } from "@/lib/security/csrf";
 import { SATELLITE_GROUPS, attribute } from "@/lib/atlas/satelliteCatalog";
 
 interface TleRecord {
@@ -31,11 +32,13 @@ function enrich(r: Omit<TleRecord, "country" | "iso3" | "role">): TleRecord {
  * asks consumers to rate-limit. On upstream failure the last successful
  * copy is served stale; with no copy, an empty payload with an error is
  * returned so the atlas can degrade gracefully.
+ *
+ * `?refresh=1` bypasses the cache window for an immediate CelesTrak
+ * refetch; it is guarded by the BSS_API_TOKEN bearer check so arbitrary
+ * visitors cannot hammer the upstream (cron: hourly
+ * `GET /api/satellites?refresh=1` with the bearer header).
  */
 const CACHE_MS = 6 * 60 * 60 * 1000;
-
-
-
 let cache: { data: TleRecord[]; timestamp: number } | null = null;
 
 async function fetchGroup(group: string): Promise<TleRecord[]> {
@@ -72,7 +75,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (cache && Date.now() - cache.timestamp < CACHE_MS) {
+  const forceRefresh =
+    request.nextUrl.searchParams.get("refresh") === "1" &&
+    validateBearerToken(request);
+
+  if (!forceRefresh && cache && Date.now() - cache.timestamp < CACHE_MS) {
     return NextResponse.json({ ...cache, cached: true });
   }
 

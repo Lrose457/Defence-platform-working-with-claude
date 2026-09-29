@@ -16,7 +16,9 @@ import { useRouter } from "next/navigation";
 import { geoNaturalEarth1, geoPath, geoGraticule10 } from "d3-geo";
 import type { GeoProjection } from "d3-geo";
 import SatelliteLayer from "@/components/atlas/SatelliteLayer";
-import InstallationLayer from "@/components/atlas/InstallationLayer";
+import InstallationLayer, {
+  INSTALLATION_TYPE_STYLE,
+} from "@/components/atlas/InstallationLayer";
 import AtlasTooltip, { type TrackedInfo } from "@/components/atlas/AtlasTooltip";
 import {
   loadWorldFeatures,
@@ -105,6 +107,29 @@ export default function WorldAtlas({
     () => [...new Set(installations.map((i) => i.type))].sort(),
     [installations],
   );
+
+  /* Per-type stats (site count + distinct host countries) for the filter
+   * options and legend. */
+  const perTypeStats = useMemo(() => {
+    const map = new Map<string, { sites: number; countries: number }>();
+    const byType = new Map<string, Set<number>>();
+    for (const inst of installations) {
+      map.set(inst.type, {
+        sites: (map.get(inst.type)?.sites ?? 0) + 1,
+        countries: 0,
+      });
+      const set = byType.get(inst.type) ?? new Set<number>();
+      set.add(inst.country_id);
+      byType.set(inst.type, set);
+    }
+    for (const [type, set] of byType) {
+      map.get(type)!.countries = set.size;
+    }
+    return map;
+  }, [installations]);
+
+  const typeLabel = (type: string) =>
+    INSTALLATION_TYPE_STYLE[type]?.label ?? type.replaceAll("_", " ");
 
   const filteredInstallations = useMemo(
     () =>
@@ -237,12 +262,14 @@ export default function WorldAtlas({
             className="rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-slate-300"
           >
             <option value="all">All types ({installations.length})</option>
-            {installationTypes.map((t) => (
-              <option key={t} value={t}>
-                {t.replaceAll("_", " ")} (
-                {installations.filter((i) => i.type === t).length})
-              </option>
-            ))}
+            {installationTypes.map((t) => {
+              const stats = perTypeStats.get(t)!;
+              return (
+                <option key={t} value={t}>
+                  {typeLabel(t)} · {stats.sites} sites · {stats.countries} countries
+                </option>
+              );
+            })}
           </select>
         )}
         <span className="text-slate-500">
@@ -374,6 +401,29 @@ export default function WorldAtlas({
             />
             <span>Untracked land</span>
           </div>
+          {showInstallations && installationTypes.length > 0 && (
+            <div className="mt-2 border-t border-slate-800 pt-2">
+              {installationTypes.map((t) => {
+                const style =
+                  INSTALLATION_TYPE_STYLE[t] ?? INSTALLATION_TYPE_STYLE.other;
+                const stats = perTypeStats.get(t)!;
+                return (
+                  <div key={t} className="mt-1 flex items-center gap-2">
+                    <span
+                      className="inline-flex h-3 w-3 items-center justify-center rounded-full text-[8px]"
+                      style={{ background: style.color, color: "#020617" }}
+                    >
+                      {style.glyph}
+                    </span>
+                    <span>
+                      {typeLabel(t)} · {stats.sites} sites
+                      · {stats.countries} countries
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

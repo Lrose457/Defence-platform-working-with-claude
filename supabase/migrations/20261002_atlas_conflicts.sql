@@ -4,14 +4,16 @@
 -- 1. Approving HIIK records in /admin/ingestion now materialises them into
 --    conflicts/conflict_parties (with a country link), so the global atlas
 --    conflict tint and country-profile conflict lists light up automatically.
---    Any pending conflict rows already in the queue are materialised here.
+--    Any approved conflict rows already in the queue are materialised here.
 -- 2. Widens the military_installations seed set (Russia/China strategic
 --    bases and NATO/allied host-nation facilities), all publicly documented.
 -- Requires 20260929 + 20261001 migrations first.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 1. Prerequisites (idempotent)
+-- 1. Prerequisites (idempotent). The live `conflicts` table uses
+--    `description` + `intensity` (text) rather than `summary`, so the
+--    materialiser writes whichever columns exist (see branch below).
 -- ---------------------------------------------------------------------------
 alter table public.conflicts
   add column if not exists intensity_level smallint
@@ -63,7 +65,9 @@ $$;
 --    route can call it with the anon-key client. Only rows already stamped
 --    'approved' are processed — pending rows are left for the reviewer —
 --    and each processed row is flipped to 'applied' for idempotency.
--- ---------------------------------------------------------------------------
+--    Conflict inserts are additionally name-guarded so replaying the same
+--    queue ids never duplicates rows (live `conflicts` has no unique name).
+-- -----------------------------------------------------------------------------
 create or replace function public.materialise_conflicts(p_queue_ids bigint[])
 returns integer
 language plpgsql
@@ -77,7 +81,13 @@ declare
   v_party_id bigint;
   v_count integer := 0;
   v_source_id bigint;
+  v_country_id bigint;
   v_intensity smallint;
+  v_name text;
+  v_region text;
+  v_status text;
+  v_description text;
+  v_source_notes text;
 begin
   if p_queue_ids is null or array_length(p_queue_ids, 1) = 0 then
     return 0;
@@ -92,25 +102,54 @@ begin
   loop
     v_source_id := r.source_id;
     v_intensity := nullif(r.normalised_payload->>'intensity_level', '')::smallint;
+    v_name := coalesce(nullif(r.normalised_payload->>'name', ''), r.title);
+    v_region := nullif(r.normalised_payload->>'region', '');
+    v_status := case lower(coalesce(r.normalised_payload->>'status', ''))
+                  when 'active' then 'Active'
+                  when 'frozen' then 'Frozen'
+                  else null end;
+    v_description := nullif(r.normalised_payload->>'summary', '');
+    v_source_notes := case
+      when nullif(r.normalised_payload->>'evidence_page', '') is not null
+        then 'HIIK Conflict Barometer 2025, p. '
+             || (r.normalised_payload->>'evidence_page')
+      else null end;
 
-    insert into public.conflicts (name, region, status, summary, intensity_level)
-    values (
-      coalesce(nullif(r.normalised_payload->>'name', ''), r.title),
-      nullif(r.normalised_payload->>'region', ''),
-      case lower(coalesce(r.normalised_payload->>'status', ''))
-        when 'active' then 'Active'
-        when 'frozen' then 'Frozen'
-        else null end,
-      nullif(r.normalised_payload->>'summary', ''),
-      v_intensity
-    )
-    on conflict do nothing
-    returning id into v_conflict_id;
+    -- Column names differ between schema generations: newer drafts used
+    -- `summary`, the live table uses `description` + `intensity` (text,
+    -- carrying HIIK's public level names). Write whichever exists.
+    if exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'conflicts'
+        and column_name = 'summary'
+    ) then
+      insert into public.conflicts
+        (name, region, status, summary, intensity_level, source_id, source_notes)
+      select v_name, v_region, v_status, v_description, v_intensity,
+             v_source_id, v_source_notes
+      where not exists (select 1 from public.conflicts c where c.name = v_name)
+      returning id into v_conflict_id;
+    else
+      insert into public.conflicts
+        (name, region, status, description, intensity, intensity_level,
+         source_id, source_notes)
+      select v_name, v_region, v_status, v_description,
+             case v_intensity
+               when 1 then 'Dispute'
+               when 2 then 'Non-violent crisis'
+               when 3 then 'Violent crisis'
+               when 4 then 'Limited war'
+               when 5 then 'War'
+             end,
+             v_intensity, v_source_id, v_source_notes
+      where not exists (select 1 from public.conflicts c where c.name = v_name)
+      returning id into v_conflict_id;
+    end if;
 
     if v_conflict_id is null then
       select c.id into v_conflict_id
       from public.conflicts c
-      where c.name = coalesce(nullif(r.normalised_payload->>'name', ''), r.title)
+      where c.name = v_name
       order by c.id desc
       limit 1;
     end if;
@@ -131,12 +170,23 @@ begin
       ]) as h
       where h is not null and h <> ''
     loop
-      v_party_id := public.country_matches_hint(hint);
-      if v_party_id is not null then
-        insert into public.conflict_parties (conflict_id, name, side, country_id, intensity_level)
-        values (v_conflict_id, hint, 'participant', v_party_id, v_intensity)
-        on conflict do nothing;
-        v_count := v_count + 1;
+      v_country_id := public.country_matches_hint(hint);
+      if v_country_id is not null then
+        /* Reset so a skipped (duplicate) insert leaves null and is not
+         * counted — the variable is reused across loop iterations. */
+        v_party_id := null;
+        insert into public.conflict_parties
+          (conflict_id, country_id, party_name, party_type, role,
+           source_id, intensity_level)
+        values
+          (v_conflict_id, v_country_id, hint, 'state', 'participant',
+           v_source_id, v_intensity)
+        on conflict (conflict_id, country_id) where country_id is not null
+        do nothing
+        returning id into v_party_id;
+        if v_party_id is not null then
+          v_count := v_count + 1;
+        end if;
       end if;
     end loop;
 
@@ -144,8 +194,7 @@ begin
       entity_type, entity_id, field_name, old_value, new_value,
       change_type, changed_at, reason, source_id, intelligence_eligible
     ) values (
-      'conflict', v_conflict_id, 'record_created', null,
-      coalesce(nullif(r.normalised_payload->>'name', ''), r.title),
+      'conflict', v_conflict_id, 'record_created', null, v_name,
       'created', now(),
       'Materialised from reviewed ingestion queue record ' || r.id::text,
       v_source_id, true
@@ -162,7 +211,10 @@ end;
 $$;
 
 revoke all on function public.materialise_conflicts(bigint[]) from public;
-grant execute on function public.materialise_conflicts(bigint[]) to authenticated;
+-- The review route runs server-side with the anon-key client, so `anon`
+-- needs EXECUTE; the function only touches rows already stamped 'approved'.
+grant execute on function public.materialise_conflicts(bigint[])
+  to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 4. One-time backfill: materialise conflict records already sitting in the
@@ -230,8 +282,8 @@ from (
     ('RAF Croughton', 'other', 'GBR', 52.0539, -1.1081, 'Active',
      'US military communications hub in Northamptonshire.',
      'https://www.lakenheath.af.mil/Units/422nd-Air-Base-Group/'),
-    ('Andersen AFB', 'airfield', 'GUM', 13.5839, 144.9250, 'Active',
-     'Key US Pacific bomber forward-operating location, Guam.',
+    ('Andersen AFB', 'airfield', 'USA', 13.5839, 144.9250, 'Active',
+     'Key US Pacific bomber forward-operating location, Guam (US territory).',
      'https://www.andersen.af.mil/'),
     ('Naval Support Facility Diego Garcia', 'port', 'USA', -7.2833, 72.4167, 'Active',
      'Air and naval facility atoll in the Chagos Archipelago; UK-US joint use.',
