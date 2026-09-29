@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lrose.dip-app</string>
+
+  <!-- Serves the synced copy in ~/Library/Application Support (launchd
+       jobs are TCC-denied access to ~/Desktop, where the project lives).
+       The installer re-syncs the copy; re-run it after every rebuild. -->
+  <key>WorkingDirectory</key>
+  <string>/Users/leorosenthal/Library/Application Support/dip-app</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>node_modules/next/dist/bin/next</string>
+    <string>start</string>
+    <string>-p</string>
+    <string>3100</string>
+  </array>
+
+  <!-- Start at login and restart if it ever exits. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/dip-app.launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/dip-app.launchd.err</string>
+</dict>
+</plist>

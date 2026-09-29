@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { ageHoursSince } from "@/lib/atlas/tleCache";
 import WorldAtlas from "@/components/atlas/WorldAtlas";
 import type {
   AtlasConflict,
@@ -15,6 +16,7 @@ export const metadata = {
 
 interface SatellitesApiResponse {
   data: { name: string; line1: string; line2: string; group: string }[];
+  timestamp?: number;
   error?: string;
 }
 
@@ -99,6 +101,10 @@ export default async function MapPage() {
    * a long cache here would serve stale records across deploys. */
   let satellites: AtlasSatellite[] | null = null;
   let satellitesError: string | null = null;
+  /* Age of the CelesTrak element cache, in hours — surfaced as a small
+   * freshness badge next to the satellite count (the hourly TLE agent
+   * keeps this <2h when healthy). */
+  let tleAgeHours: number | null = null;
   try {
     const base = await getBaseUrl();
     const res = await fetch(`${base}/api/satellites`, {
@@ -108,6 +114,7 @@ export default async function MapPage() {
     const json = (await res.json()) as SatellitesApiResponse;
     if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
     satellites = (json.data ?? []) as AtlasSatellite[];
+    tleAgeHours = ageHoursSince(json.timestamp);
   } catch (err) {
     satellitesError = err instanceof Error ? err.message : "elements unavailable";
     satellites = null;
@@ -121,6 +128,20 @@ export default async function MapPage() {
           <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
             {countriesR.data?.length ?? 0} tracked countries · {installations.length} installations ·{" "}
             {satellites ? satellites.length : "—"} satellites · {conflicts.length} conflict links
+            {tleAgeHours != null && (
+              <span
+                title="Age of the cached CelesTrak elements (hourly refresh agent)"
+                className={`ml-2 rounded border px-1.5 py-0.5 normal-case ${
+                  tleAgeHours <= 7
+                    ? "border-emerald-800 text-emerald-500"
+                    : tleAgeHours <= 24
+                      ? "border-amber-800 text-amber-500"
+                      : "border-red-800 text-red-500"
+                }`}
+              >
+                TLE {tleAgeHours}h old
+              </span>
+            )}
           </p>
         </div>
       </div>
