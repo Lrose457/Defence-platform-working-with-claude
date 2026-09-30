@@ -12,10 +12,14 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { geoNaturalEarth1, geoPath, geoGraticule10 } from "d3-geo";
 import type { GeoProjection } from "d3-geo";
-import SatelliteLayer from "@/components/atlas/SatelliteLayer";
+const SatelliteLayer = dynamic(
+  () => import("@/components/atlas/SatelliteLayer"),
+  { ssr: false },
+);
 import InstallationLayer, {
   INSTALLATION_TYPE_STYLE,
 } from "@/components/atlas/InstallationLayer";
@@ -25,7 +29,6 @@ import {
   type AtlasCountry,
   type AtlasBudget,
   type AtlasConflict,
-  type AtlasSatellite,
   type AtlasInstallation,
   type JoinedFeature,
 } from "@/components/atlas/atlasData";
@@ -39,8 +42,6 @@ export interface WorldAtlasProps {
   countries: AtlasCountry[];
   budgets: AtlasBudget[];
   conflicts: AtlasConflict[];
-  satellites: AtlasSatellite[] | null;
-  satellitesError: string | null;
   installations: AtlasInstallation[];
   installationsError: string | null;
 }
@@ -49,8 +50,6 @@ export default function WorldAtlas({
   countries,
   budgets,
   conflicts,
-  satellites,
-  satellitesError,
   installations,
   installationsError,
 }: WorldAtlasProps) {
@@ -360,12 +359,7 @@ export default function WorldAtlas({
             )}
 
             {showSatellites && (
-              <SatelliteLayer
-                satellites={satellites}
-                error={satellitesError}
-                projection={projection}
-                zoom={transform.k}
-              />
+              <SatelliteLayer projection={projection} zoom={transform.k} />
             )}
           </g>
         </svg>

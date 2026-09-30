@@ -6,14 +6,20 @@
  * movement with requestAnimationFrame. Hover a marker for operator,
  * role and programme detail.
  *
+ * satellite.js is imported lazily on first mount (it is the atlas's
+ * heaviest dependency) and TLE elements are fetched from /api/satellites
+ * directly, keeping both out of the server-rendered HTML.
+ *
  * Positions are real propagation; attribution (country/role) is curated —
  * see lib/atlas/satelliteCatalog.ts.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as satellite from "satellite.js";
 import type { GeoProjection } from "d3-geo";
 import type { AtlasSatellite } from "@/components/atlas/atlasData";
+
+type SatelliteLib = typeof import("satellite.js");
+type Satrec = ReturnType<SatelliteLib["twoline2satrec"]>;
 
 const TYPE_COLORS: Record<string, string> = {
   "Early warning": "#f59e0b",
@@ -33,29 +39,49 @@ function roleColor(role: string | undefined): string {
   return "#94a3b8";
 }
 
+/* Loaded once by ensureLib(); null until then. */
+let satlib: SatelliteLib | null = null;
+
+/** Lazily import satellite.js and validate its exports (v5 namespace). */
+async function ensureLib(): Promise<SatelliteLib | null> {
+  if (satlib) return satlib;
+  try {
+    const lib = await import("satellite.js");
+    if (typeof lib.twoline2satrec !== "function" || typeof lib.propagate !== "function") {
+      console.error("[atlas] satellite.js failed to load its exports");
+      return null;
+    }
+    satlib = lib;
+    return lib;
+  } catch {
+    console.error("[atlas] satellite.js chunk failed to load");
+    return null;
+  }
+}
+
 interface PropagatedSat extends AtlasSatellite {
-  satrec: ReturnType<typeof satellite.twoline2satrec>;
+  satrec: Satrec;
   color: string;
-  /** Upcoming ground track (lng/lat pairs), sampled every minute. */
+  /** Upcoming ground track (lng/lat pairs), sampled every few minutes. */
   trail: [number, number][];
 }
 
 const TRAIL_MINUTES = 95; // ~one LEO orbit; GEO sats will trace a short arc
-const TRAIL_STEP_MINUTES = 1.5;
+const TRAIL_STEP_MINUTES = 3;
 
 /** Precompute the upcoming ground track for one object. */
-function computeTrail(satrec: ReturnType<typeof satellite.twoline2satrec>): [number, number][] {
+function computeTrail(lib: SatelliteLib, satrec: Satrec): [number, number][] {
   const trail: [number, number][] = [];
   const start = Date.now();
   for (let m = 0; m <= TRAIL_MINUTES; m += TRAIL_STEP_MINUTES) {
     try {
       const date = new Date(start + m * 60_000);
-      const pv = satellite.propagate(satrec, date);
+      const pv = lib.propagate(satrec, date);
       const pos = pv?.position;
       if (!pos || typeof pos === "boolean") continue;
-      const gd = satellite.eciToGeodetic(pos, satellite.gstime(date));
-      const lat = satellite.degreesLat(gd.latitude);
-      const lng = satellite.degreesLong(gd.longitude);
+      const gd = lib.eciToGeodetic(pos, lib.gstime(date));
+      const lat = lib.degreesLat(gd.latitude);
+      const lng = lib.degreesLong(gd.longitude);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
       trail.push([lng, lat]);
     } catch {
@@ -65,52 +91,63 @@ function computeTrail(satrec: ReturnType<typeof satellite.twoline2satrec>): [num
   return trail;
 }
 
+function parse(lib: SatelliteLib, source: AtlasSatellite[]): PropagatedSat[] {
+  const parsed: PropagatedSat[] = [];
+  for (const sat of source) {
+    try {
+      const satrec = lib.twoline2satrec(sat.line1, sat.line2);
+      const role = sat.role ?? "Civil / other";
+      parsed.push({
+        ...sat,
+        satrec,
+        role,
+        country: sat.country ?? "Unattributed",
+        iso3: sat.iso3 ?? "",
+        color: roleColor(role),
+        trail: computeTrail(lib, satrec),
+      });
+    } catch {
+      /* Malformed TLE — skip the object. */
+    }
+  }
+  return parsed;
+}
+
 export default function SatelliteLayer({
-  satellites,
-  error,
   projection,
   zoom,
 }: {
-  satellites: AtlasSatellite[] | null;
-  error: string | null;
   projection: GeoProjection;
   zoom: number;
 }) {
+  const [sats, setSats] = useState<PropagatedSat[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const rafRef = useRef<number | null>(null);
   const lastTickRef = useRef(0);
 
-  /* Pre-parse TLEs once. Namespace import: CJS interop for named imports
-   * is unreliable under bundlers, so access via the namespace object. */
-  const sats = useMemo<PropagatedSat[] | null>(() => {
-    if (!satellites) return null;
-    if (
-      typeof satellite.twoline2satrec !== "function" ||
-      typeof satellite.propagate !== "function"
-    ) {
-      console.error("[atlas] satellite.js failed to load its exports");
-      return [];
-    }
-    const parsed: PropagatedSat[] = [];
-    for (const sat of satellites) {
+  /* Load elements + satellite.js on mount. */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const lib = await ensureLib();
+      if (!lib || cancelled) return;
       try {
-        const satrec = satellite.twoline2satrec(sat.line1, sat.line2);
-        const role = sat.role ?? "Civil / other";
-        parsed.push({
-          ...sat,
-          satrec,
-          role,
-          country: sat.country ?? "Unattributed",
-          iso3: sat.iso3 ?? "",
-          color: roleColor(role),
-          trail: computeTrail(satrec),
-        });
-      } catch {
-        /* Malformed TLE — skip the object. */
+        const res = await fetch("/api/satellites", { headers: { Accept: "application/json" } });
+        const json = (await res.json()) as { data?: AtlasSatellite[]; error?: string };
+        if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+        if (cancelled) return;
+        setSats(parse(lib, json.data ?? []));
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : "elements unavailable");
+        }
       }
-    }
-    return parsed;
-  }, [satellites]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* Animation loop (~2 updates per second — plenty for map-scale motion). */
   useEffect(() => {
@@ -131,19 +168,19 @@ export default function SatelliteLayer({
   const [hovered, setHovered] = useState<PropagatedSat | null>(null);
 
   const points = useMemo(() => {
-    if (!sats) return [];
+    if (!sats || !satlib) return [];
     const date = new Date(now);
-    const gmst = satellite.gstime(date);
+    const gmst = satlib.gstime(date);
     const out: { sat: PropagatedSat; x: number; y: number }[] = [];
     for (const sat of sats) {
       try {
-        const pv = satellite.propagate(sat.satrec, date);
+        const pv = satlib.propagate(sat.satrec, date);
         const pos = pv?.position;
         /* v5 types position as `true | EciVec3` — true means propagation failed. */
         if (!pos || typeof pos === "boolean") continue;
-        const gd = satellite.eciToGeodetic(pos, gmst);
-        const lat = satellite.degreesLat(gd.latitude);
-        const lng = satellite.degreesLong(gd.longitude);
+        const gd = satlib.eciToGeodetic(pos, gmst);
+        const lat = satlib.degreesLat(gd.latitude);
+        const lng = satlib.degreesLong(gd.longitude);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
         const xy = projection([lng, lat]);
         if (!xy) continue;
@@ -155,11 +192,11 @@ export default function SatelliteLayer({
     return out;
   }, [sats, now, projection]);
 
-  if (error && points.length === 0) {
+  if (loadError && points.length === 0) {
     return (
       <g>
         <text x={20} y={70} fill="#f59e0b" fontSize={11}>
-          Satellite layer unavailable: {error}
+          Satellite layer unavailable: {loadError}
         </text>
       </g>
     );
@@ -204,9 +241,7 @@ export default function SatelliteLayer({
           onMouseLeave={() => setHovered(null)}
         />
       ))}
-      {hovered && (
-        <HoverCard sat={hovered} projection={projection} />
-      )}
+      {hovered && <HoverCard sat={hovered} projection={projection} />}
     </g>
   );
 }
@@ -219,19 +254,20 @@ function HoverCard({
   projection: GeoProjection;
 }) {
   /* Anchor near the satellite's current point. */
-  const date = new Date();
-  const gmst = satellite.gstime(date);
   let x = 0;
   let y = 0;
   try {
-    const pv = satellite.propagate(sat.satrec, date);
-    const pos = pv?.position;
-    if (pos && typeof pos !== "boolean") {
-      const gd = satellite.eciToGeodetic(pos, gmst);
-      const xy = projection([satellite.degreesLong(gd.longitude), satellite.degreesLat(gd.latitude)]);
-      if (xy) {
-        x = xy[0];
-        y = xy[1];
+    if (satlib) {
+      const date = new Date();
+      const pv = satlib.propagate(sat.satrec, date);
+      const pos = pv?.position;
+      if (pos && typeof pos !== "boolean") {
+        const gd = satlib.eciToGeodetic(pos, satlib.gstime(date));
+        const xy = projection([satlib.degreesLong(gd.longitude), satlib.degreesLat(gd.latitude)]);
+        if (xy) {
+          x = xy[0];
+          y = xy[1];
+        }
       }
     }
   } catch {
