@@ -7,6 +7,8 @@
 #
 #   scripts/smoke-test.sh              # test http://localhost:3100
 #   BASE=http://localhost:3300 scripts/smoke-test.sh
+#   SMOKE_SKIP_TLE=1 scripts/smoke-test.sh   # CI: no refresh agent, so the
+#                                            # TLE cache is legitimately cold
 #
 # Exit code 0 = all checks passed.
 
@@ -83,6 +85,9 @@ check "/countries/1 renders the inventory section" $m
 # --- satellites: TLE cache healthy -------------------------------------------
 code=$(fetch /api/satellites/status "$TMP/status.json")
 check "/api/satellites/status returns 200" $([ "$code" = "200" ]; echo $?)
+if [ "${SMOKE_SKIP_TLE:-0}" = "1" ]; then
+  echo "  skip  TLE cache contents (SMOKE_SKIP_TLE=1)"
+else
 python3 - "$TMP/status.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -97,6 +102,7 @@ print(f"  {'ok   ' if ok else 'FAIL '} TLE cache cached={d.get('cached')} count=
 sys.exit(0 if ok else 1)
 PY
 [ $? -ne 0 ] && FAILURES=$((FAILURES + 1))
+fi
 
 # --- summary -----------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then
