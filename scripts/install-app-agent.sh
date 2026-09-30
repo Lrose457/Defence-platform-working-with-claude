@@ -65,6 +65,12 @@ for i in $(seq 1 15); do
   sleep 2
 done
 if [ "${code:-}" = "200" ]; then
+  # Warm the TLE cache so the atlas header shows real counts immediately
+  # (the module cache is empty after every deploy).
+  TOKEN=$(grep '^BSS_API_TOKEN=' "$APP_DIR/.env.local" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+  curl -fsS --max-time 120 -H "Authorization: Bearer $TOKEN" \
+    "http://localhost:3100/api/satellites?refresh=1" > /dev/null \
+    && echo "TLE cache warmed." || echo "WARNING: TLE cache warm-up failed (hourly agent will retry)." >&2
   echo "App agent installed — serving on http://localhost:3100 (auto-start at login, keepalive on)."
 else
   echo "WARNING: agent loaded but /map returned ${code:-no response} — check /tmp/dip-app.launchd.err" >&2

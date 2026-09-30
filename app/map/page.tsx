@@ -32,11 +32,7 @@ export default async function MapPage() {
   const [countriesR, budgetsR, conflictsOverviewR, installationsR, statusR] =
     await Promise.all([
       supabase.from("countries").select("id, name, iso_code, region").order("name"),
-      supabase
-        .from("budgets")
-        .select("country_id, year, amount_usd")
-        .order("year", { ascending: false })
-        .limit(2000),
+      supabase.from("latest_budget_overview").select("country_id, year, amount_usd"),
       supabase
         .from("country_conflict_overview")
         .select("country_id, conflict_id, name, intensity_level")

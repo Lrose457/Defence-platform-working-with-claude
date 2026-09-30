@@ -91,7 +91,14 @@ function computeTrail(lib: SatelliteLib, satrec: Satrec): [number, number][] {
   return trail;
 }
 
-function parse(lib: SatelliteLib, source: AtlasSatellite[]): PropagatedSat[] {
+/* Module-level cache for the parsed+propagated satellite set. The layer
+ * unmounts whenever the user toggles the satellites OFF/ON; without this,
+ * every toggle re-fetches and re-runs ~21k SGP4 trail propagations. Keyed
+ * by response timestamp so a fresh TLE refresh does invalidate it. */
+let parsedCache: { key: string; sats: PropagatedSat[] } | null = null;
+
+function parse(lib: SatelliteLib, source: AtlasSatellite[], cacheKey: string): PropagatedSat[] {
+  if (parsedCache && parsedCache.key === cacheKey) return parsedCache.sats;
   const parsed: PropagatedSat[] = [];
   for (const sat of source) {
     try {
@@ -110,6 +117,7 @@ function parse(lib: SatelliteLib, source: AtlasSatellite[]): PropagatedSat[] {
       /* Malformed TLE — skip the object. */
     }
   }
+  parsedCache = { key: cacheKey, sats: parsed };
   return parsed;
 }
 
@@ -134,10 +142,16 @@ export default function SatelliteLayer({
       if (!lib || cancelled) return;
       try {
         const res = await fetch("/api/satellites", { headers: { Accept: "application/json" } });
-        const json = (await res.json()) as { data?: AtlasSatellite[]; error?: string };
+        const json = (await res.json()) as {
+          data?: AtlasSatellite[];
+          timestamp?: number;
+          error?: string;
+        };
         if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
         if (cancelled) return;
-        setSats(parse(lib, json.data ?? []));
+        setSats(
+          parse(lib, json.data ?? [], String(json.timestamp ?? "no-timestamp")),
+        );
       } catch (err) {
         if (!cancelled) {
           setLoadError(err instanceof Error ? err.message : "elements unavailable");
