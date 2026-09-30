@@ -32,6 +32,10 @@
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>NODE_ENV</key>
     <string>production</string>
+    <!-- Mirrors the -p 3100 argument so code that probes the local
+         server (e.g. lib/ops payload check) can rely on $PORT. -->
+    <key>PORT</key>
+    <string>3100</string>
   </dict>
 
   <key>StandardOutPath</key>

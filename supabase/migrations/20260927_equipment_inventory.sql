@@ -254,12 +254,26 @@ drop policy if exists "public can read ai_defence_projects" on public.ai_defence
 create policy "public can read ai_defence_projects" on public.ai_defence_projects for select using (true);
 
 -- 9. updated_at triggers
-create trigger if not exists training_exercises_updated_at_trigger
- before update on public.training_exercises for each row execute function public.set_updated_at();
-create trigger if not exists carrier_air_wings_updated_at_trigger
- before update on public.carrier_air_wings for each row execute function public.set_updated_at();
-create trigger if not exists ai_defence_projects_updated_at_trigger
- before update on public.ai_defence_projects for each row execute function public.set_updated_at();
+-- CREATE TRIGGER has no IF NOT EXISTS in Postgres; guard in a DO block.
+do $$
+begin
+  if not exists (select 1 from pg_trigger where tgname = 'training_exercises_updated_at_trigger'
+    and tgrelid = 'public.training_exercises'::regclass) then
+    create trigger training_exercises_updated_at_trigger
+      before update on public.training_exercises for each row execute function public.set_updated_at();
+  end if;
+  if not exists (select 1 from pg_trigger where tgname = 'carrier_air_wings_updated_at_trigger'
+    and tgrelid = 'public.carrier_air_wings'::regclass) then
+    create trigger carrier_air_wings_updated_at_trigger
+      before update on public.carrier_air_wings for each row execute function public.set_updated_at();
+  end if;
+  if not exists (select 1 from pg_trigger where tgname = 'ai_defence_projects_updated_at_trigger'
+    and tgrelid = 'public.ai_defence_projects'::regclass) then
+    create trigger ai_defence_projects_updated_at_trigger
+      before update on public.ai_defence_projects for each row execute function public.set_updated_at();
+  end if;
+end;
+$$;
 
 
 

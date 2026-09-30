@@ -46,11 +46,14 @@ export default async function CountryProfile({
     notFound();
   }
 
-  const [contractsResult, budgetsResult, inventoryResult, wingsResult, wingAircraftResult, aiResult, programmesResult, conflictsResult, marketsResult, oobResult, contractorsResult, spaceResult] = await Promise.all([
+  const [contractsResult, budgetsResult, inventoryResult, wingsResult, aiResult, programmesResult, conflictsResult, marketsResult, oobResult, contractorsResult, spaceResult] = await Promise.all([
+    /* Count + first page in one round trip; the UI links to /contracts for more. */
     supabase
       .from("contracts")
-      .select("id, value, status, title")
-      .eq("country_id", countryId),
+      .select("id, value, status, title", { count: "exact" })
+      .eq("country_id", countryId)
+      .order("id", { ascending: false })
+      .limit(8),
 
     supabase
       .from("budgets")
@@ -68,10 +71,6 @@ export default async function CountryProfile({
       .from("carrier_air_wing_overview")
       .select("*")
       .eq("country_id", countryId),
-
-    supabase
-      .from("carrier_air_wing_aircraft")
-      .select("wing_id, equipment_id, quantity"),
 
     supabase
       .from("ai_defence_project_overview")
@@ -130,10 +129,21 @@ export default async function CountryProfile({
   const legislationItems = (legislation ?? []).filter((l) => l.kind !== "defence_review").slice(0, 6);
 
   const contracts = contractsResult.data ?? [];
+  const totalContracts = contractsResult.count ?? contracts.length;
   const latestBudget = budgetsResult.data?.[0] ?? null;
   const holdings = (inventoryResult.data ?? []) as InventoryHolding[];
   const wings = wingsResult.data ?? [];
-  const wingAircraft = wingAircraftResult.data ?? [];
+  /* Wing aircraft are fetched only for this country's wings, and only when
+   * there are any — never a table-wide scan. */
+  const wingIds = (wingsResult.error ? [] : wings).map((w) => w.wing_id);
+  const wingAircraft = wingIds.length
+    ? (
+        await supabase
+          .from("carrier_air_wing_aircraft")
+          .select("wing_id, equipment_id, quantity")
+          .in("wing_id", wingIds)
+      ).data ?? []
+    : [];
   const aiProjects = aiResult.data ?? [];
   const spaceRows = (spaceResult.data ?? []) as {
     id: number;
@@ -170,13 +180,15 @@ export default async function CountryProfile({
     const legacy = await supabase
       .from("country_equipment")
       .select("country_id, equipment_id")
-      .eq("country_id", countryId);
+      .eq("country_id", countryId)
+      .limit(200);
     const ids = (legacy.data ?? []).map((r) => r.equipment_id).filter((v) => v != null);
     if (ids.length > 0) {
       const { data: eq } = await supabase
         .from("equipment")
         .select("id, name, branch, sub_category")
-        .in("id", ids);
+        .in("id", ids)
+        .limit(200);
       const nameById = new Map((eq ?? []).map((e) => [e.id, e]));
       resolvedHoldings = ids.map((equipment_id: number, i: number) => {
         const e = nameById.get(equipment_id);
@@ -451,7 +463,7 @@ export default async function CountryProfile({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded border border-slate-800 bg-slate-900/50 p-4">
           <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300">
-            Linked contracts · {contracts.length}
+            Linked contracts · {totalContracts}
           </h2>
           {contracts.length === 0 ? (
             <p className="mt-2 text-sm text-slate-400">No contracts are currently linked to this country.</p>

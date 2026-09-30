@@ -91,8 +91,10 @@ select s.branch, s.name, s.slug from (values
  ('air_force','ISR / EW','isr-ew'),
  ('air_force','Trainers','trainer'),
  ('air_force','Helicopters','helicopter'),
- ('air_force','UAVs / UCAVs','uav-ucav'),
- ('air_force','Air defence (air)','air-defence-air')
+ ('air_force','UAVs / UCAVs','uav-ucav'), ('air_force','Air defence (air)','air-defence-air')
+) as s(branch, name, slug)
+where not exists (select 1 from public.equipment_categories e where e.slug = s.slug);
+
 -- 3. Backfill equipment.branch / sub_category for ingested systems.
 --    Only fills NULL branch (never overwrites analyst values).
 update public.equipment e
