@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminAccess, AdminGate } from "@/lib/auth/adminAccess";
 import { formatNumber } from "@/lib/format";
 
 export const metadata = { title: "Audience analytics — Admin" };
@@ -12,6 +13,11 @@ type SurveyRow = {
 };
 
 export default async function AdminAnalyticsPage() {
+  const access = await getAdminAccess();
+  if (!access.ok) {
+    return <AdminGate reason={access.reason} redirectTo="/admin/analytics" />;
+  }
+
   const supabase = await createClient();
 
   const [{ data: responses }, { data: searchAgg }] = await Promise.all([

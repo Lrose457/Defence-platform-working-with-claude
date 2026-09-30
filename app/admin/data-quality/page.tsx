@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAdminAccess, AdminGate } from "@/lib/auth/adminAccess";
 import { provenanceToneClass, scoreSourceProvenance } from "@/lib/provenance";
 
 type DatasetQualityRow = {
@@ -17,6 +18,11 @@ type SourceHealthRow = {
 };
 
 export default async function DataQualityPage() {
+  const access = await getAdminAccess();
+  if (!access.ok) {
+    return <AdminGate reason={access.reason} redirectTo="/admin/data-quality" />;
+  }
+
   const supabase = await createClient();
 
   const [{ data: datasets }, { data: sourceHealth }] = await Promise.all([

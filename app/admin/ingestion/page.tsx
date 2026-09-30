@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { IngestionReviewPanel } from "@/components/IngestionReviewPanel";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminAccess, AdminGate } from "@/lib/auth/adminAccess";
 
 type Summary = {
   active_sources: number;
@@ -68,6 +69,11 @@ export default async function IngestionPage({
 }: {
   searchParams: Promise<{ source_id?: string | string[] }>;
 }) {
+  const access = await getAdminAccess();
+  if (!access.ok) {
+    return <AdminGate reason={access.reason} redirectTo="/admin/ingestion" />;
+  }
+
   const supabase = await createClient();
   const resolvedParams = await searchParams;
   const selectedSourceId =

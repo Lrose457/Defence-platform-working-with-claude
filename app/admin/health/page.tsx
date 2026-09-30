@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { provenanceToneClass, scoreSourceProvenance } from "@/lib/provenance";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminAccess, AdminGate } from "@/lib/auth/adminAccess";
 
 type Quality = {
   countries: number;
@@ -20,6 +21,11 @@ type Quality = {
 };
 
 export default async function AdminHealthPage() {
+  const access = await getAdminAccess();
+  if (!access.ok) {
+    return <AdminGate reason={access.reason} redirectTo="/admin/health" />;
+  }
+
   const supabase = await createClient();
 
   const { data, error } = await supabase
