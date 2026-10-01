@@ -1,5 +1,6 @@
 import { getAdminAccess, AdminGate } from "@/lib/auth/adminAccess";
 import { getOpsSnapshot, type CheckState } from "@/lib/ops/telemetry";
+import BudgetEditor from "./BudgetEditor";
 
 /**
  * /admin/ops — operator dashboard.
@@ -178,7 +179,7 @@ export default async function OpsPage() {
                 <th scope="col" className="py-2 pr-4">Dataset</th>
                 <th scope="col" className="py-2 pr-4">Latest record</th>
                 <th scope="col" className="py-2 pr-4">Age</th>
-                <th scope="col" className="py-2 pr-4">Budget</th>
+                <th scope="col" className="py-2 pr-4">Budget (hours — editable)</th>
                 <th scope="col" className="py-2 text-right">State</th>
               </tr>
             </thead>
@@ -194,7 +195,9 @@ export default async function OpsPage() {
                   <td className="py-2 pr-4 font-mono text-xs text-slate-300">
                     {f.ageHours != null ? `${f.ageHours}h` : "—"}
                   </td>
-                  <td className="py-2 pr-4 font-mono text-xs text-slate-500">{f.budgetHours}h</td>
+                  <td className="py-2 pr-4">
+                    <BudgetEditor dataset={f.table} initialHours={f.budgetHours} />
+                  </td>
                   <td className="py-2 text-right">
                     <StateBadge state={f.state} />
                   </td>

@@ -62,16 +62,28 @@ check "/map renders the atlas header" $m
 len=$(visible_len "$TMP/map.html")
 check "/map streams real content (visible chars: $len)" $([ "$len" -ge 1500 ]; echo $? )
 
-# --- /countries: index lists countries, not the DB error box -----------------
+# --- /countries: shell page + lean JSON API (rows render client-side) --------
 code=$(fetch /countries "$TMP/idx.html")
 check "/countries returns 200" $([ "$code" = "200" ]; echo $?)
 idx_text=$(text_of "$TMP/idx.html")
-case "$idx_text" in *"Unregistered"*) m=1;; *) m=0;; esac
-check "/countries has no 'Unregistered API key' error" $m
-case "$idx_text" in *"No countries are currently available"*) m=1;; *) m=0;; esac
-check "/countries lists countries (not the empty state)" $m
-case "$idx_text" in *"United Kingdom"*) m=0;; *) m=1;; esac
-check "/countries contains seeded country rows" $m
+case "$idx_text" in *"Global defence countries"*) m=0;; *) m=1;; esac
+check "/countries renders the page shell" $m
+code=$(fetch /api/countries "$TMP/api-countries.json")
+check "/api/countries returns 200" $([ "$code" = "200" ]; echo $?)
+python3 - "$TMP/api-countries.json" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    rows = d.get("rows") or []
+    ok = len(rows) > 100 and any(r.get("name") == "United Kingdom" for r in rows)
+    err = d.get("error")
+    print(f"  {'ok   ' if ok else 'FAIL '} /api/countries rows={len(rows)} uk_present={ok}{(' error=' + err) if err else ''}")
+    sys.exit(0 if ok else 1)
+except Exception as exc:
+    print(f"  FAIL  /api/countries unparsable: {exc}")
+    sys.exit(1)
+PY
+[ $? -ne 0 ] && FAILURES=$((FAILURES + 1))
 
 # --- /countries/1: full profile streams --------------------------------------
 code=$(fetch /countries/1 "$TMP/c1.html")
