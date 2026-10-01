@@ -24,6 +24,18 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Secret scan
+        run: |
+          # The repo is public: fail CI if any key-shaped secret is committed.
+          # Scans the working tree only — history is known to contain two
+          # already-dead keys (see SECURITY.md); full-history scanning is a
+          # documented follow-up (gitleaks + .gitleaksignore).
+          if git grep -nE '(sb_secret_[A-Za-z0-9_-]+|sbp_[A-Za-z0-9]{40,}|sk_live_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+|BSS_API_TOKEN=[A-Za-z0-9_-]{32,})' -- . ; then
+            echo "::error::Key-shaped secret found in committed files"
+            exit 1
+          fi
+          echo "No key-shaped secrets in committed files."
+
       - name: Typecheck
         run: npx tsc --noEmit
 
