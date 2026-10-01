@@ -119,10 +119,11 @@ async function readTleAgentLog(): Promise<{ line: string | null; at: Date | null
 }
 
 /*
- * Staleness budgets per ingested dataset, in hours. These reflect the
- * platform's actual refresh cadence (manual/weekly pipeline ingests), not
- * an aspirational SLA — the point is to warn when a pipeline silently
- * stops landing new records.
+ * Fallback staleness budgets per ingested dataset, in hours. The live values
+ * live in the ops_freshness_budgets table (editable on /admin/ops); these
+ * defaults apply when the table is missing, empty or unreadable. They reflect
+ * the platform's actual refresh cadence (manual/weekly pipeline ingests),
+ * not an aspirational SLA.
  */
 const FRESHNESS_BUDGETS: { table: string; label: string; budgetHours: number }[] = [
   { table: "conflicts", label: "Conflicts (HIIK)", budgetHours: 72 },
@@ -132,6 +133,21 @@ const FRESHNESS_BUDGETS: { table: string; label: string; budgetHours: number }[]
   { table: "country_equipment", label: "Equipment holdings", budgetHours: 840 },
 ];
 
+/** Load operator-editable budgets; fall back to the hardcoded defaults. */
+async function loadFreshnessBudgets(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<{ table: string; label: string; budgetHours: number }[]> {
+  const { data, error } = await supabase
+    .from("ops_freshness_budgets")
+    .select("dataset, label, budget_hours");
+  if (error || !data || data.length === 0) return FRESHNESS_BUDGETS;
+  return data.map((row) => ({
+    table: String(row.dataset),
+    label: String(row.label),
+    budgetHours: Number(row.budget_hours),
+  }));
+}
+
 export async function getOpsSnapshot(): Promise<OpsSnapshot> {
   const [meta, agent, page, supabase] = await Promise.all([
     Promise.resolve(getCacheMeta()),
@@ -140,11 +156,13 @@ export async function getOpsSnapshot(): Promise<OpsSnapshot> {
     createClient(),
   ]);
 
+  const budgets = await loadFreshnessBudgets(supabase);
+
   const [countriesRes, conflictsRes, installationsRes, ...freshnessRes] = await Promise.all([
     supabase.from("countries").select("id", { count: "exact", head: true }),
     supabase.from("conflicts").select("id", { count: "exact", head: true }),
     supabase.from("military_installations").select("id", { count: "exact", head: true }),
-    ...FRESHNESS_BUDGETS.map((f) =>
+    ...budgets.map((f) =>
       supabase.from(f.table).select("created_at").order("created_at", { ascending: false }).limit(1),
     ),
   ]);
@@ -158,7 +176,7 @@ export async function getOpsSnapshot(): Promise<OpsSnapshot> {
   const ageHours = ageHoursSince(meta.timestamp);
   const tleState: CheckState = !meta.cached ? "fail" : (ageHours ?? 99) > 3 ? "warn" : "ok";
 
-  const freshness: FreshnessRow[] = FRESHNESS_BUDGETS.map((f, i) => {
+  const freshness: FreshnessRow[] = budgets.map((f, i) => {
     const row = freshnessRes[i]?.data?.[0] as { created_at: string | null } | undefined;
     const latestAt = row?.created_at ?? null;
     const age = latestAt != null ? ageHoursSince(new Date(latestAt).getTime()) : null;
