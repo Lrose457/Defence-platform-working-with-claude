@@ -125,7 +125,17 @@ Verified: `PATCH /rest/v1/countries` → 401 with the anon key; intake POSTs
 - **Legal placeholders resolved**: operator identity and contact email are
   published on /terms, /privacy and /data-licences (previously
   `[INSERT …]` placeholders — a compliance gap for a privacy notice).
+- **Auth signup trigger hardened**: `handle_new_user()` EXECUTE revoked from
+  anon/authenticated/PUBLIC (trigger firing ignores EXECUTE grants, so this
+  only closes the direct-RPC surface flagged by the advisor).
+- **Residual (accepted)**: 5 high-severity advisories in dev-only lint
+  tooling (`braces`/`micromatch` via eslint-config-next) — DoS on
+  adversarial glob patterns that never occur in lint input;
+  `npm audit --omit=dev` (production deps) is clean. Leaked-password
+  protection must be enabled in the Supabase dashboard — the management
+  token lacks `auth_config_write` (403).
 
 Verified: malformed RPC calls → 400 `invalid rate limit parameters`; valid
-keys still count; `npm audit` clean; typecheck/eslint/build green; 13/13
-smoke checks.
+keys still count; survey limiter 200×5 → 429 and still 429 after a server
+restart (counter survived via the database); `handle_new_user` EXECUTE now
+false for anon/authenticated; typecheck/eslint/build green; 13/13 smoke.

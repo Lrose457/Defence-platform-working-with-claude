@@ -62,3 +62,8 @@ AS $function$
   delete from public.rate_limit_counters
   where window_start < now() - interval '24 hours';
 $function$;
+
+-- The auth signup trigger function does not need to be directly callable
+-- through PostgREST — trigger firing ignores EXECUTE grants — so remove the
+-- default PUBLIC grant (advisor: anon_security_definer_function_executable).
+revoke execute on function public.handle_new_user() from anon, authenticated, public;
