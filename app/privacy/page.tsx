@@ -57,10 +57,10 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-semibold text-slate-100">1. Who we are</h2>
         <p>
           The Defence Intelligence Platform is published and operated by{" "}
-          <strong className="text-slate-100">[INSERT LEGAL ENTITY / TRADING NAME]</strong> of{" "}
-          <strong className="text-slate-100">[INSERT CONTACT ADDRESS]</strong>. For all
-          privacy matters contact{" "}
-          <strong className="text-slate-100">[INSERT PRIVACY CONTACT EMAIL]</strong>.
+          <strong className="text-slate-100">Leo Rosenthal</strong>{" "}
+          (&quot;we&quot;, &quot;us&quot;). For all privacy matters contact{" "}
+          <strong className="text-slate-100">leojudahrosenthal@gmail.com</strong>{" "}
+          in the first instance; a postal address is available on request.
           You also have the right to complain to the Information
           Commissioner&apos;s Office (ico.org.uk) if you are in the UK.
         </p>

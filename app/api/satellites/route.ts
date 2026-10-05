@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { rateLimit, requestKey } from "@/lib/security/rateLimit";
+import { requestKey } from "@/lib/security/rateLimit";
+import { dbRateLimit } from "@/lib/security/rateLimitDb";
 import { validateBearerToken } from "@/lib/security/csrf";
 import { SATELLITE_GROUPS, attribute } from "@/lib/atlas/satelliteCatalog";
 import {
@@ -61,7 +62,7 @@ async function fetchGroup(group: string): Promise<TleRecord[]> {
 }
 
 export async function GET(request: NextRequest) {
-  const limit = rateLimit(`satellites:${requestKey(request)}`, 30);
+  const limit = await dbRateLimit(`satellites:${requestKey(request)}`, 30);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many requests." },
