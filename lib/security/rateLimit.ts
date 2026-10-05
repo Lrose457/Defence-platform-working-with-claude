@@ -27,8 +27,8 @@ function hashKey(input: string): string {
  * key is a coarse fingerprint of the request itself — hashed user agent
  * plus accept-language — rather than a constant. This keeps limits
  * per-client-ish while staying privacy-preserving (no IP is stored).
- * A fingerprint is spoofable, so it complements — never replaces — the
- * database-backed limiter in `rateLimitDb`.
+ * A fingerprint is spoofable, so it acts only as the fallback when the
+ * database-backed limiter in `rateLimitDb` is unreachable.
  */
 export function requestKey(request: Request): string {
   if (process.env.TRUST_PROXY === "true") {

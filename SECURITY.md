@@ -105,3 +105,27 @@ findings from the October 2026 audit:
 Verified: `PATCH /rest/v1/countries` → 401 with the anon key; intake POSTs
 → 201; Supabase security advisor no longer reports `rls_disabled_in_public`
 (28) or `security_definer_view` (68).
+
+## Hardening pass (patch 0.4 — 2026-10-05)
+
+- **Next.js upgraded 16.3.4 → 16.3.8** — fixes GHSA-vcvr-r3jv-pc5j (critical,
+  RCE in `next/og` ImageResponse). The app does not import `next/og`, so the
+  vulnerable code was never reachable, but the patched version removes the
+  dependency risk entirely.
+- **Rate limiting is now database-primary for API routes** (`dbRateLimit`):
+  counters live in `rate_limit_counters` and hold across restarts and
+  instances; the per-instance in-memory limiter is the fallback for database
+  outages. Previously `/api/satellites`, `/api/survey` and `/api/opt-out`
+  counted only in memory — a restart reset every attacker's budget to zero.
+- **Rate-limit RPCs hardened** (migration `20261008_rate_limit_rpc_hardening.sql`):
+  `increment_rate_limit` validates its key (1–200 chars of
+  `[A-Za-z0-9._:/@-]`) and window (1s–24h), so the public anon key can no
+  longer flood the counter table or inflate guessed keys to lock others out;
+  `advance_rate_limit_window` trims every row older than 24h.
+- **Legal placeholders resolved**: operator identity and contact email are
+  published on /terms, /privacy and /data-licences (previously
+  `[INSERT …]` placeholders — a compliance gap for a privacy notice).
+
+Verified: malformed RPC calls → 400 `invalid rate limit parameters`; valid
+keys still count; `npm audit` clean; typecheck/eslint/build green; 13/13
+smoke checks.

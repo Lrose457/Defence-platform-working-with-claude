@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { rateLimit, requestKey } from "@/lib/security/rateLimit";
+import { requestKey } from "@/lib/security/rateLimit";
+import { dbRateLimit } from "@/lib/security/rateLimitDb";
 import { requireCsrfOrBearer } from "@/lib/security/csrf";
 import { sanitizeText } from "@/lib/security/sanitize";
 
@@ -8,7 +9,7 @@ export async function POST(request: Request) {
   const csrfCheck = requireCsrfOrBearer(request);
   if (csrfCheck) return csrfCheck;
 
-  const limit = rateLimit(`opt-out:${requestKey(request)}`, 5);
+  const limit = await dbRateLimit(`opt-out:${requestKey(request)}`, 5);
   if (!limit.allowed) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
 
   let body: { name?: unknown; email?: unknown; details?: unknown };

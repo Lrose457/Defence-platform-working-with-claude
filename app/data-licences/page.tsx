@@ -80,7 +80,7 @@ export default function DataLicencesPage() {
           Every dataset displayed on this platform comes from a named public
           source. This page records what we use, under which licence, and how it
           is credited. Corrections or takedown requests:{" "}
-          <span className="font-mono text-slate-300">[INSERT CONTACT EMAIL]</span>.
+          <span className="font-mono text-slate-300">leojudahrosenthal@gmail.com</span>.
         </p>
       </header>
 
@@ -111,7 +111,7 @@ export default function DataLicencesPage() {
           We present factual data with attribution and link to the original
           publisher wherever possible. If you believe content on this site
           infringes your rights, email{" "}
-          <span className="font-mono text-slate-300">[INSERT CONTACT EMAIL]</span>{" "}
+          <span className="font-mono text-slate-300">leojudahrosenthal@gmail.com</span>{" "}
           with the page URL, the material concerned and the basis of your
           complaint. Verified requests are actioned within 14 working days.
         </p>

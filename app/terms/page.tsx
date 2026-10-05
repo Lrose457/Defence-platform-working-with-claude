@@ -10,9 +10,9 @@ export default function TermsPage() {
       <p className="text-slate-400">
         Version 2.0 — 27 September 2026. By using this platform you agree to
         these terms. The service is operated by{" "}
-        <strong className="text-slate-200">[INSERT LEGAL ENTITY]</strong>{" "}
+        <strong className="text-slate-200">Leo Rosenthal</strong>{" "}
         (&quot;we&quot;), contact:{" "}
-        <span className="font-mono text-slate-300">[INSERT CONTACT EMAIL]</span>.
+        <span className="font-mono text-slate-300">leojudahrosenthal@gmail.com</span>.
       </p>
 
       <section className="intel-surface space-y-4 p-6 text-sm leading-6 text-slate-300">
