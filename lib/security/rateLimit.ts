@@ -21,9 +21,14 @@ function hashKey(input: string): string {
  *
  * `x-forwarded-for` is only honoured when TRUST_PROXY=true. Without that
  * flag (the default), the header is client-controllable and would let an
- * attacker rotate fake IPs to bypass per-IP limits — so all such clients
- * share one "unproxied" bucket. Behind a trusted proxy the left-most
- * forwarded entry is the real client.
+ * attacker rotate fake IPs to bypass per-IP limits.
+ *
+ * When the real client IP is not available (unproxied deployments), the
+ * key is a coarse fingerprint of the request itself — hashed user agent
+ * plus accept-language — rather than a constant. This keeps limits
+ * per-client-ish while staying privacy-preserving (no IP is stored).
+ * A fingerprint is spoofable, so it complements — never replaces — the
+ * database-backed limiter in `rateLimitDb`.
  */
 export function requestKey(request: Request): string {
   if (process.env.TRUST_PROXY === "true") {
@@ -33,7 +38,9 @@ export function requestKey(request: Request): string {
     return hashKey("unknown-client");
   }
 
-  return hashKey("unproxied-client");
+  const ua = request.headers.get("user-agent") ?? "";
+  const lang = request.headers.get("accept-language") ?? "";
+  return hashKey(`${ua}::${lang}`);
 }
 
 export function rateLimit(

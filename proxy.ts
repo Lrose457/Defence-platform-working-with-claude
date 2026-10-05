@@ -31,9 +31,9 @@ function buildCsp(nonce: string): string {
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    "img-src 'self' data: https:",
+    "img-src 'self' data:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co https://api.stripe.com https://raw.githubusercontent.com",
+    "connect-src 'self' https://*.supabase.co https://api.stripe.com",
     "frame-src 'self' https://checkout.stripe.com https://js.stripe.com",
     "upgrade-insecure-requests",
   ].join("; ");
@@ -49,6 +49,16 @@ function applySecurityHeaders(response: NextResponse, csp: string) {
   response.headers.set("Content-Security-Policy", csp);
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("X-Content-Type-Options", "nosniff");
+  if (IS_PROD) {
+    /*
+     * All deployment surfaces are HTTPS (Supabase + Stripe require it);
+     * HSTS asks browsers to refuse plain-HTTP downgrade attempts.
+     */
+    response.headers.set(
+      "Strict-Transport-Security",
+      "max-age=63072000; includeSubDomains",
+    );
+  }
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   response.headers.set("X-XSS-Protection", "0");

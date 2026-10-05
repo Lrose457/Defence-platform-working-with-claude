@@ -11,9 +11,14 @@ export default function OptOutPage() {
     setSubmitting(true);
     setMessage("");
     const form = new FormData(event.currentTarget);
+    const csrfToken =
+      document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ?? "";
     const response = await fetch("/api/opt-out", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
       body: JSON.stringify(Object.fromEntries(form.entries())),
     });
     const result = await response.json();

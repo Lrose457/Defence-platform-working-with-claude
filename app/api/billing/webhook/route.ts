@@ -21,7 +21,8 @@
 
 import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -137,7 +138,7 @@ function verifyStripeSignature(
  * Look up the Supabase user ID associated with a Stripe customer ID.
  */
 async function findUserIdByCustomerId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   customerId: string,
 ) {
   const { data, error } = await supabase
@@ -154,7 +155,7 @@ async function findUserIdByCustomerId(
  * Upsert a subscription record from Stripe subscription data.
  */
 async function upsertSubscription(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   userId: string,
   subscription: StripeSubscription,
   customerId?: string,
@@ -194,7 +195,7 @@ async function upsertSubscription(
  * Free / cancelled → remove the role.
  */
 async function syncPlatformRole(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   userId: string,
   planName: string,
 ) {
@@ -259,7 +260,11 @@ export async function POST(request: Request) {
     return new NextResponse("Malformed payload", { status: 400 });
   }
 
-  const supabase = await createClient();
+  /*
+   * Service-role client: subscription and platform_roles writes must land
+   * regardless of RLS, and the requesting party is Stripe, not a browser.
+   */
+  const supabase = createAdminClient();
 
   switch (event.type) {
     case "checkout.session.completed": {
