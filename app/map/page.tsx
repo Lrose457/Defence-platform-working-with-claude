@@ -5,6 +5,7 @@ import WorldAtlas from "@/components/atlas/WorldAtlas";
 import type {
   AtlasConflict,
   AtlasInstallation,
+  HybridWarfareIncident,
 } from "@/components/atlas/atlasData";
 
 export const metadata = {
@@ -29,7 +30,7 @@ async function getBaseUrl(): Promise<string> {
 export default async function MapPage() {
   const supabase = await createClient();
 
-  const [countriesR, budgetsR, conflictsOverviewR, installationsR, statusR] =
+  const [countriesR, budgetsR, conflictsOverviewR, installationsR, statusR, hybridR] =
     await Promise.all([
       supabase.from("countries").select("id, name, iso_code, region").order("name"),
       supabase.from("latest_budget_overview").select("country_id, year, amount_usd"),
@@ -50,6 +51,17 @@ export default async function MapPage() {
       })
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
+      /* Hybrid-warfare incidents (20261010 migration): verified rows +
+       * live 'possible' candidates. Degrades to an empty layer with an
+       * on-map hint until the migration is applied. */
+      supabase
+        .from("atlas_hybrid_warfare")
+        .select(
+          "id, country_id, attacked_iso3, attacked_name, target_type, lat, lng," +
+            " title, summary, definition_clause, target_description, government_response," +
+            " domains, confidence_score, status, first_seen_at, last_seen_at, source_url",
+        )
+        .limit(500),
     ]);
 
   /* The conflict overview view needs the patch02 migration. Until it is
@@ -79,6 +91,9 @@ export default async function MapPage() {
       .filter((v): v is AtlasConflict => v !== null);
   }
 
+  const incidents: HybridWarfareIncident[] = (hybridR.data ?? []) as unknown as HybridWarfareIncident[];
+  const incidentsError = hybridR.error ? "run the 20261010 migration" : null;
+
   const installations: AtlasInstallation[] = (installationsR.data ?? []).map((i) => ({
     id: i.id,
     name: i.name,
@@ -105,7 +120,8 @@ export default async function MapPage() {
           <h1 className="text-3xl font-bold tracking-tight text-white">Global Atlas</h1>
           <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
             {countriesR.data?.length ?? 0} tracked countries · {installations.length} installations ·{" "}
-            {status?.count ?? "—"} satellites · {conflicts.length} conflict links
+            {status?.count ?? "—"} satellites · {conflicts.length} conflict links ·{" "}
+            {incidents.length} hybrid incidents
             {tleAgeHours != null && (
               <span
                 title="Age of the cached CelesTrak elements (hourly refresh agent)"
@@ -130,6 +146,8 @@ export default async function MapPage() {
         conflicts={conflicts}
         installations={installations}
         installationsError={installationsR.error ? "run the 20261001 migration" : null}
+        incidents={incidents}
+        incidentsError={incidentsError}
       />
     </div>
   );
