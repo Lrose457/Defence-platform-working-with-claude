@@ -20,17 +20,20 @@ Definition sources (per the accepted plan):
      (d) economic / energy coercion, (e) political / governance interference,
      used in concert by state or proxy.
 
-A text is labelled *possible* hybrid warfare when it exhibits **co-ordinated use
-of two or more of these domains/tactics against a target that exploits a
-vulnerability** (the defining "blend" + "coordination" + "exploitation" triad).
-Single-domain events (pure cyberattack, a pure airstrike, a lone leak) do not
-by themselves clear the bar and score lower, but are still surfaced as
-`needs_review` because the source may under-report the blended nature.
+A text is labelled *possible* hybrid warfare when it exhibits **coordinated
+use of two or more of these domains/tactics** -- the defining "blend" (both
+domains appearing in the same account is the evidence of coordination).
+Exploiting a vulnerability raises the confidence score and keeps a
+*single-domain* event that carries exploitation language in `needs_review`
+(the source may be under-reporting the blend); single-domain events without
+exploitation (a pure cyberattack, a pure airstrike, a lone leak) are
+`not_hybrid` and never enter the review queue.
 """
 
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Iterable
 
@@ -42,7 +45,8 @@ INDICATORS_MILITARY: list[str] = [
     "military base", "armed forces", "troop deployment", "invasion force",
     "shelling", "bombing", "missile strike", "airstrike", "drone strike",
     "artillery", "gunship", "raiding craft", "naval blockade", "military exercise",
-    "invasion", "incursion",
+    "invasion", "incursion", "drone", "rocket", "warship", "airspace",
+    "convoy", "proxy", "shelled",
 ]
 
 # (b) information operations & disinformation
@@ -51,7 +55,8 @@ INDICATORS_INFO: list[str] = [
     "operation", "propaganda", "troll", "bot network", "deepfake", "leaked",
     "document dump", "hack-and-leak", "hackandleak", "media manipulation",
     "false flag", "psyops", "psychological operation", "smear campaign",
-    "astroturf", "coordinated inauthent",
+    "astroturf", "coordinated inauthent", "misinformation", "information war",
+    "hoax",
 ]
 
 # (c) cyber operations
@@ -59,6 +64,8 @@ INDICATORS_CYBER: list[str] = [
     "cyber attack", "cyberattack", "ddos", "data breach", "hack", "ransomware",
     "spear-phish", "phishing campaign", "malware", "backdoor", "zero-day",
     "satellite jamming", "gps jamming", "radio jamming", "blackout", "cyber",
+    "cyberattack", "cyber-attack", "hacker", "phishing", "wiper", "spyware",
+    "credential",
 ]
 
 # (d) economic / energy coercion
@@ -66,19 +73,26 @@ INDICATORS_ECONOMIC: list[str] = [
     "sanction", "energy cut", "gas cut", "oil cut", "supply cut", "trade ban",
     "economic coercion", "currency attack", "banking disruption", "debt trap",
     "bribe", "corruption", "oligarch", "financial pressure", "market manipulation",
+    "embargo", "gas supplies", "energy blackmail", "pipeline", "tariff",
 ]
 
 # (e) political / governance interference
 INDICATORS_GOV: list[str] = [
-    "election interference", "vote buying", "electoral", "coup", "coup d'état",
-    "assassination", "targeted killing", "intimidation", "co-opt", "capture the "
-    "state", "compromise official", "leak of", "bribing official",
+    "election interference", "vote buying", "electoral", "military coup",
+    "coup attempt", "coup d'état", "coup d'etat", "assassination", "targeted killing",
+    "intimidation", "co-opt", "capture the state", "compromise official",
+    "leak of", "bribing official", "foreign agent", "meddling", "destabilise",
+    "destabilize", "rigged",
 ]
 
 # Vulnerability exploitation patterns (definitional "exploit").
+# Deliberately precise: "amid"/"amidst" (removed) matched almost every
+# English news item while never firing in French/Swedish/Spanish copy,
+# which made the signal meaningless and language-skewed.
 INDICATORS_VULN: list[str] = [
-    "exploit", "vulnerability", "weakness", "fracture", "divide",
-    "polarisation", "leverage", "amid", "amidst", "capitalis",
+    "exploit", "vulnerability", "vulnerabilities", "vulnerable",
+    "weakness", "fracture", "divide", "polarisation", "polarization",
+    "leverage", "reliance", "dependence",
 ]
 
 # Target-type signals -> civilian infrastructure vs military.
@@ -88,6 +102,7 @@ CIVILIAN_TARGETS: list[str] = [
     "transport hub", "railway", "airport", "seaport", "port", "fuel depot",
     "pipeline", "telecom", "internet backbone", "media outlet",
     "civilian", "residential", "town", "city", "village",
+    "power plant",
 ]
 
 MILITARY_TARGETS: list[str] = [
@@ -145,9 +160,22 @@ class Classification:
     domains: list[str] = field(default_factory=list)
 
 
+# A needle may be followed by a regular English suffix ("airstrike" also
+# matches "airstrikes", "hack" matches "hacked"), but never by the rest of
+# a longer word. This keeps inflection recall while killing the substring
+# false positives that were flooding the review queue: "troll" inside
+# "stroll", "port" inside "transport", "grid" inside "gridlock".
+_SUFFIX = r"(?:s|es|ed|ing)?"
+
+
 def _hit(text: str, needles: Iterable[str]) -> list[str]:
+    """Whole-word needle match with regular English inflections."""
     low = text.lower()
-    return [n for n in needles if n in low]
+    return [
+        needle
+        for needle in needles
+        if re.search(r"(?<!\w)" + re.escape(needle) + _SUFFIX + r"(?!\w)", low)
+    ]
 
 
 def resolve_iso3(text: str) -> str | None:
@@ -163,8 +191,9 @@ def classify(text: str, title: str = "") -> Classification:
     """Classify a news item against the hybrid-warfare definition.
 
     The blend requirement (two+ domains coordinated against an exploitable
-    target) is enforced explicitly: a single-domain hit is recorded as
-    `needs_review`, not as a confident hybrid finding.
+    target) is enforced explicitly: two or more domains in one account is
+    the blend and reaches `possible_hybrid_warfare`; a single-domain hit
+    needs exploitation language even to reach `needs_review`.
     """
     haystack = f"{title} {text}".lower()
 
@@ -199,15 +228,23 @@ def classify(text: str, title: str = "") -> Classification:
     confidence = min(100, 25 + domain_score + vuln_bonus + target_bonus)
 
     # Label ladder:
-    #  * >= 2 domains + a vulnerability = confident "possible" hybrid finding
-    #  * single domain + vulnerability = needs_review (may be under-reported)
-    #  * single domain, no vulnerability = not hybrid (pure conventional/incident)
-    if len(active) >= 2 and vuln:
+    #  * >= 2 domains = the definitional cross-domain blend -> possible
+    #    hybrid finding. Exploitation still raises the confidence score but
+    #    no longer gates the label: text-level vulnerability detection is
+    #    too weak a signal (and English-only), while the blend itself is
+    #    the core requirement of all three definition sources.
+    #  * single domain + vulnerability = needs_review (the source may be
+    #    under-reporting the blended nature of the event)
+    #  * single domain, no vulnerability = not hybrid (pure conventional
+    #    incident; kept out of the review queue entirely)
+    if not active:
+        label = "not_hybrid"
+    elif len(active) >= 2:
         label = "possible_hybrid_warfare"
-    elif len(active) >= 1 and vuln:
+    elif vuln:
         label = "needs_review"
     else:
-        label = "not_hybrid" if not active else "needs_review"
+        label = "not_hybrid"
 
     clauses_matched = [CLAUSE_LABELS[d] for d in active]
     # Single human-readable clause summarising which definition tools fired.

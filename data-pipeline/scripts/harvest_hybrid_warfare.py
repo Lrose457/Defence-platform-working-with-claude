@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -24,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from dip_common import add_common_args, make_record, replay_footer, slugify, write_replay
+from dip_common import add_common_args, make_record, replay_footer, slugify, utc_now_iso, write_replay
 from hybrid_classification import Classification, classify
 
 USER_AGENT = "dip-hybrid-harvester/1.0 (+defence-platform; rss-harvest)"
@@ -62,14 +63,19 @@ def _clean(value: str | None) -> str:
     return " ".join((value or "").split())
 
 
-def _fetch(url: str) -> str | None:
+def _fetch(url: str) -> tuple[str | None, str | None]:
+    """Return (xml, None) on success or (None, error) on failure.
+
+    Distinguishing the two lets the stats writer separate "feed is dead"
+    from "feed fetched fine but yielded no candidates" — the nightly cron
+    opens an issue on the former, never on the latter.
+    """
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+            return resp.read().decode("utf-8", errors="replace"), None
     except Exception as exc:  # noqa: BLE001 - one bad feed must not kill the run
-        print(f"  ! feed fetch failed: {url} -> {exc}")
-        return None
+        return None, str(exc)
 
 
 def _iter_items(rss_xml: str) -> list[dict[str, str]]:
@@ -101,7 +107,9 @@ def _evidence_urls(item: dict[str, str]) -> list[str]:
     urls: list[str] = []
     for key in ("link", "guid"):
         val = (item.get(key) or "").strip()
-        if val and val not in urls:
+        # RSS guids are often bare ids, not links — only real URLs belong
+        # in the evidence list.
+        if val.startswith(("http://", "https://")) and val not in urls:
             urls.append(val)
     return urls
 
@@ -151,12 +159,20 @@ def shape_record(item: dict[str, str], broadcaster: str,
     return rec
 
 
-def harvest_one(url: str, broadcaster: str,
-                classify_fn=classify, limit: int = 0) -> list[dict[str, Any]]:
-    xml_text = _fetch(url)
-    if not xml_text:
-        return []
-    items = _iter_items(xml_text)
+def harvest_feed(url: str, broadcaster: str,
+                 classify_fn=classify, limit: int = 0
+                 ) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch and classify one feed.
+
+    Returns (records, error): error is None after a successful fetch (even
+    if the feed yielded zero candidates), non-None when the feed could not
+    be fetched at all.
+    """
+    xml_text, err = _fetch(url)
+    if err is not None:
+        print(f"  ! feed fetch failed: {url} -> {err}")
+        return [], err
+    items = _iter_items(xml_text or "")
     if limit:
         items = items[:limit]
     records: list[dict[str, Any]] = []
@@ -164,13 +180,52 @@ def harvest_one(url: str, broadcaster: str,
         rec = shape_record(item, broadcaster, classify_fn=classify_fn)
         if rec is not None:
             records.append(rec)
-    return records
+    return records, None
+
+
+def harvest_one(url: str, broadcaster: str,
+                classify_fn=classify, limit: int = 0) -> list[dict[str, Any]]:
+    """Records-only wrapper around harvest_feed (fetch errors swallowed)."""
+    return harvest_feed(url, broadcaster, classify_fn=classify_fn, limit=limit)[0]
+
+
+def build_stats(feed_results: list[dict[str, Any]],
+                records: list[dict[str, Any]],
+                generated_at: str | None = None) -> dict[str, Any]:
+    """Machine-readable run summary for the nightly cron (pure function).
+
+    `feed_results` entries carry {broadcaster, url, error, candidates} —
+    error is null when the fetch succeeded.
+    """
+    failed = [f for f in feed_results if f.get("error")]
+    labels: dict[str, int] = {}
+    for rec in records:
+        label = rec["normalised_payload"].get("classification_label") or "unknown"
+        labels[label] = labels.get(label, 0) + 1
+    return {
+        "generated_at": generated_at or utc_now_iso(),
+        "feeds_attempted": len(feed_results),
+        "feeds_ok": len(feed_results) - len(failed),
+        "feeds_failed": [
+            {"broadcaster": f["broadcaster"], "url": f["url"], "error": f["error"]}
+            for f in failed
+        ],
+        "candidates": len(records),
+        "labels": labels,
+        "by_feed": [
+            {"broadcaster": f["broadcaster"], "candidates": f.get("candidates", 0)}
+            for f in feed_results
+        ],
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Harvest hybrid-warfare candidates from EMEA public broadcasters.")
     add_common_args(p, default_output="hybrid_warfare_replay.json")
     p.add_argument("--feeds", nargs="*", help="Limit to a subset of feed names.")
+    p.add_argument("--stats", type=Path, default=None,
+                   help="Also write a machine-readable run summary (JSON) "
+                        "for automation (nightly cron, monitoring).")
     args = p.parse_args(argv)
 
     feeds = HARVEST_FEEDS
@@ -179,15 +234,30 @@ def main(argv: list[str] | None = None) -> int:
 
     total = 0
     all_records: list[dict[str, Any]] = []
+    feed_results: list[dict[str, Any]] = []
     for broadcaster, url in feeds:
         print(f"  . harvesting {broadcaster}: {url}")
-        recs = harvest_one(url, broadcaster, limit=args.limit)
+        recs, err = harvest_feed(url, broadcaster, limit=args.limit)
         all_records.extend(recs)
         total += len(recs)
+        feed_results.append({
+            "broadcaster": broadcaster,
+            "url": url,
+            "error": err,
+            "candidates": len(recs),
+        })
 
     n = write_replay(all_records, Path(args.output))
     replay_footer(Path(args.output), n)
     print(f"  candidate incidents: {total}")
+
+    if args.stats:
+        stats = build_stats(feed_results, all_records)
+        args.stats.parent.mkdir(parents=True, exist_ok=True)
+        args.stats.write_text(json.dumps(stats, indent=2, ensure_ascii=False),
+                              encoding="utf-8")
+        print(f"  stats: {stats['feeds_ok']}/{stats['feeds_attempted']} feeds ok, "
+              f"failed={len(stats['feeds_failed'])}, candidates={n} -> {args.stats}")
     return 0
 
 

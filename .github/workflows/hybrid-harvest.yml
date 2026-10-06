@@ -1,0 +1,136 @@
+name: Nightly hybrid harvest
+
+# Harvests European public-broadcaster RSS feeds through the hybrid-warfare
+# rules engine every night. Opens (or updates) a GitHub issue when a feed
+# breaks or the candidate count drops to nothing, and closes it on recovery.
+#
+# This job produces *signal*, not ingestion: posting replay records into the
+# platform needs an admin session, which CI deliberately does not have. The
+# replay payload and stats JSON are uploaded as artifacts instead, so an
+# analyst can replay them from a logged-in session.
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Classifier unit tests
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest -q \
+            data-pipeline/scripts/test_hybrid_classification.py \
+            data-pipeline/scripts/test_harvest_hybrid_warfare.py
+
+      - name: Harvest candidate incidents
+        run: python data-pipeline/scripts/harvest_hybrid_warfare.py --stats hybrid-harvest-stats.json
+
+      - name: Run summary
+        run: |
+          python -m json.tool hybrid-harvest-stats.json
+          {
+            echo "## Hybrid harvest"
+            echo '```json'
+            python -m json.tool hybrid-harvest-stats.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload replay payload and stats
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-harvest
+          path: |
+            data-pipeline/data/hybrid_warfare_replay.json
+            hybrid-harvest-stats.json
+
+      # The workflow itself stays green — a quiet news day is not an
+      # infrastructure failure. Degradation is reported through the issue
+      # (updated in place, so nightly failures never spam), with the
+      # candidate count in the body as requested.
+      - name: Open, update, or close the degradation issue
+        uses: actions/github-script@v7
+        env:
+          # Raise once a few nightly runs establish the real baseline; at 1
+          # the check fires only when a working set of feeds yields nothing.
+          MIN_CANDIDATES: "1"
+        with:
+          script: |
+            const fs = require('fs');
+            const stats = JSON.parse(fs.readFileSync('hybrid-harvest-stats.json', 'utf8'));
+            const minCandidates = parseInt(process.env.MIN_CANDIDATES || '1', 10);
+            const TITLE = '[hybrid-harvest] nightly harvest degraded';
+            const failed = stats.feeds_failed.length;
+            const degraded = failed > 0 || stats.candidates < minCandidates;
+
+            const lines = [
+              '## Nightly hybrid harvest degraded',
+              '',
+              '| metric | value |',
+              '| --- | --- |',
+              `| run (UTC) | ${stats.generated_at} |`,
+              `| feeds ok | ${stats.feeds_ok}/${stats.feeds_attempted} |`,
+              `| **candidate incidents** | **${stats.candidates}** |`,
+              `| labels | ${JSON.stringify(stats.labels)} |`,
+              '',
+            ];
+            if (failed > 0) {
+              lines.push('### Failed feeds', '');
+              for (const f of stats.feeds_failed) {
+                lines.push(`- **${f.broadcaster}** — \`${f.url}\` — ${f.error}`);
+              }
+              lines.push('');
+            }
+            lines.push(
+              '### Per-feed yield', '',
+              ...stats.by_feed.map(b => `- ${b.broadcaster}: ${b.candidates}`), '',
+              '<sub>Updated in place by the nightly hybrid harvest workflow. ' +
+              'Raise `MIN_CANDIDATES` in the workflow once a multi-night ' +
+              'baseline exists.</sub>',
+            );
+            const body = lines.join('\n');
+
+            const { owner, repo } = context.repo;
+            const open = (await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', per_page: 100,
+            })).data;
+            const existing = open.find(i => i.title === TITLE);
+
+            if (degraded) {
+              if (existing) {
+                await github.rest.issues.update({
+                  owner, repo, issue_number: existing.number, body,
+                });
+                core.info(`Updated existing issue #${existing.number}`);
+              } else {
+                const created = await github.rest.issues.create({
+                  owner, repo, title: TITLE, body,
+                });
+                core.info(`Opened issue #${created.data.number}`);
+              }
+            } else if (existing) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: existing.number,
+                body: `Recovered: ${stats.feeds_ok}/${stats.feeds_attempted} feeds ok, ` +
+                      `${stats.candidates} candidate incident(s).`,
+              });
+              await github.rest.issues.update({
+                owner, repo, issue_number: existing.number, state: 'closed',
+              });
+              core.info(`Closed issue #${existing.number}`);
+            } else {
+              core.info('Healthy run, no issue needed.');
+            }
