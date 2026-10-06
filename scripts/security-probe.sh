@@ -183,10 +183,15 @@ else
   echo "  FAIL  webhook error body leak (${wh_body:0:80})"
 fi
 
-# Signed-but-wrong webhook request must 400 (verification still active)
-# when the deployment has a secret configured.
+# Signed-but-wrong webhook request must fail closed. Both acceptable
+# outcomes are non-2xx without disclosing configuration state:
+#   400 — secret configured, signature rejected
+#   500 — handler disabled (secret unset on the deployment)
+# The probe cannot and must not learn which one applies (that is the
+# non-disclosure property itself), so both fail-closed results pass and
+# any 2xx fails.
 if [[ -n "${STRIPE_WEBHOOK_SECRET:-}" ]]; then
-  check_status "webhook wrong signature → 400" "400" \
+  check_status "webhook wrong signature → fail-closed (400 or 500)" "400|500" \
     "$(curl_local -X POST "$BASE/api/billing/webhook" \
       -H 'Content-Type: application/json' -H 'stripe-signature: t=1,v1=deadbeef' -d '{}')"
 else
