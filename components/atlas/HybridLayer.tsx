@@ -18,6 +18,7 @@
 import Link from "next/link";
 import type { GeoProjection } from "d3-geo";
 import type { HybridWarfareIncident } from "@/components/atlas/atlasData";
+import { spiralOffset } from "@/components/atlas/atlasLayout";
 
 /** Marker style per target type; shared with the WorldAtlas legend. */
 export const HYBRID_TARGET_STYLE: Record<
@@ -29,9 +30,6 @@ export const HYBRID_TARGET_STYLE: Record<
   dual: { color: "#a855f7", glyph: "◆", label: "Dual target" },
   unknown: { color: "#94a3b8", glyph: "?", label: "Unclassified target" },
 };
-
-/** ~137.5° — spreads stacked markers without visible alignment. */
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 export default function HybridLayer({
   incidents,
@@ -80,10 +78,9 @@ export default function HybridLayer({
     const idx = seen.get(key) ?? 0;
     seen.set(key, idx + 1);
     if (idx > 0) {
-      const angle = idx * GOLDEN_ANGLE;
-      const radius = (3 + 2.4 * Math.sqrt(idx)) / zoom;
-      xy[0] += Math.cos(angle) * radius;
-      xy[1] += Math.sin(angle) * radius;
+      const { dx, dy } = spiralOffset(idx, zoom);
+      xy[0] += dx;
+      xy[1] += dy;
     }
     placed.push({ incident, x: xy[0], y: xy[1] });
   }

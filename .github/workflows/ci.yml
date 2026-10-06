@@ -39,6 +39,9 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Unit tests
+        run: npm test
+
       - name: Lint
         run: npm run lint
 

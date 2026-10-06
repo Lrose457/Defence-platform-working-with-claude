@@ -28,6 +28,7 @@ import HybridLayer, {
   HybridIncidentCard,
   HYBRID_TARGET_STYLE,
 } from "@/components/atlas/HybridLayer";
+import { hoverCardPosition } from "@/components/atlas/atlasLayout";
 import AtlasTooltip, { type TrackedInfo } from "@/components/atlas/AtlasTooltip";
 import {
   loadWorldFeatures,
@@ -59,6 +60,10 @@ const HOVER_CARD_H: Record<HoverState["kind"], number> = {
   installation: 132,
   incident: 272,
 };
+
+/** Horizontal footprint to reserve: the w-64 (256px) card + the 12px
+ * cursor gutter, so the card never overhangs the container's right edge. */
+const HOVER_CARD_W = 268;
 
 export interface WorldAtlasProps {
   countries: AtlasCountry[];
@@ -478,13 +483,14 @@ export default function WorldAtlas({
         {hover && (
           <div
             className="pointer-events-none absolute z-20 w-64 rounded border border-slate-700 bg-slate-950/95 p-3 text-xs shadow-xl"
-            style={{
-              left: Math.max(4, Math.min(hover.x + 12, hover.cw - 268)),
-              top: Math.max(
-                4,
-                Math.min(hover.y + 12, hover.ch - HOVER_CARD_H[hover.kind]),
-              ),
-            }}
+            style={hoverCardPosition(
+              hover.x,
+              hover.y,
+              hover.cw,
+              hover.ch,
+              HOVER_CARD_W,
+              HOVER_CARD_H[hover.kind],
+            )}
           >
             {hover.kind === "country" && (
               <AtlasTooltip
