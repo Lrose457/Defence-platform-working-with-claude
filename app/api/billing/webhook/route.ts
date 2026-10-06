@@ -218,12 +218,18 @@ async function syncPlatformRole(
     });
 }
 
+/*
+ * Error responses are deliberately generic. This endpoint is reachable by
+ * any unauthenticated caller, so the body must not disclose configuration
+ * state (e.g. whether STRIPE_WEBHOOK_SECRET is set) or which stage of
+ * verification rejected the request. Details go to the server log only.
+ */
 export async function POST(request: Request) {
   if (!STRIPE_WEBHOOK_SECRET) {
     console.error(
       "STRIPE_WEBHOOK_SECRET is not set — webhook handler is disabled.",
     );
-    return new NextResponse("Webhook secret not configured", { status: 500 });
+    return new NextResponse("Webhook handler error", { status: 500 });
   }
 
   // Read the raw body as text — we need the exact bytes for signature
@@ -233,7 +239,8 @@ export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
 
   if (!signature) {
-    return new NextResponse("Missing Stripe signature", { status: 400 });
+    console.error("Stripe webhook received a request without a signature header.");
+    return new NextResponse("Webhook request rejected", { status: 400 });
   }
 
   const { valid } = verifyStripeSignature(
@@ -244,7 +251,7 @@ export async function POST(request: Request) {
 
   if (!valid) {
     console.error("Webhook signature verification failed.");
-    return new NextResponse("Invalid signature", { status: 400 });
+    return new NextResponse("Webhook request rejected", { status: 400 });
   }
 
   let event: StripeEvent;
@@ -257,7 +264,7 @@ export async function POST(request: Request) {
      * which would replay an event we can never parse.
      */
     console.error("Stripe webhook received a malformed JSON payload.");
-    return new NextResponse("Malformed payload", { status: 400 });
+    return new NextResponse("Webhook request rejected", { status: 400 });
   }
 
   /*

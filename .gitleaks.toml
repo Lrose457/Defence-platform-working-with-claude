@@ -1,0 +1,19 @@
+# gitleaks configuration for the nightly history scan.
+#
+# Supabase *publishable* keys (`sb_publishable_…`) are designed to ship in
+# the browser bundle — RLS enforces read-only access for them — so they are
+# not secrets and must not fail the scan. Service-role keys (`sb_secret_…`)
+# and management tokens (`sbp_…`) remain fully in scope: no allowlist entry
+# exists for them.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public publishable keys and placeholder configs"
+regexes = [
+  '''sb_publishable_[A-Za-z0-9_-]+''',
+  '''placeholder-anon-key''',
+]
+paths = [
+  '''\.env\.example''',
+]
