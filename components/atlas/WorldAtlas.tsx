@@ -14,7 +14,8 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { geoNaturalEarth1, geoPath, geoGraticule10 } from "d3-geo";
+import Link from "next/link";
+import { geoNaturalEarth1, geoPath, geoGraticule10, geoCentroid } from "d3-geo";
 import type { GeoProjection } from "d3-geo";
 const SatelliteLayer = dynamic(
   () => import("@/components/atlas/SatelliteLayer"),
@@ -23,6 +24,10 @@ const SatelliteLayer = dynamic(
 import InstallationLayer, {
   INSTALLATION_TYPE_STYLE,
 } from "@/components/atlas/InstallationLayer";
+import HybridLayer, {
+  HybridIncidentCard,
+  HYBRID_TARGET_STYLE,
+} from "@/components/atlas/HybridLayer";
 import AtlasTooltip, { type TrackedInfo } from "@/components/atlas/AtlasTooltip";
 import {
   loadWorldFeatures,
@@ -30,6 +35,7 @@ import {
   type AtlasBudget,
   type AtlasConflict,
   type AtlasInstallation,
+  type HybridWarfareIncident,
   type JoinedFeature,
 } from "@/components/atlas/atlasData";
 
@@ -38,12 +44,30 @@ const HEIGHT = 500;
 
 const worldFeatures: JoinedFeature[] = loadWorldFeatures();
 
+/** Hover target. Positions are container CSS pixels (the HTML overlay is
+ * positioned in CSS px), so the panel tracks the cursor at any rendered
+ * width and under zoom/pan — viewBox units made it drift whenever the
+ * rendered width differed from WIDTH. */
+type HoverState =
+  | { kind: "country"; jf: JoinedFeature; x: number; y: number; cw: number; ch: number }
+  | { kind: "installation"; installation: AtlasInstallation; x: number; y: number; cw: number; ch: number }
+  | { kind: "incident"; incident: HybridWarfareIncident; x: number; y: number; cw: number; ch: number };
+
+/** Approximate overlay card heights, used to keep the panel inside the box. */
+const HOVER_CARD_H: Record<HoverState["kind"], number> = {
+  country: 176,
+  installation: 132,
+  incident: 272,
+};
+
 export interface WorldAtlasProps {
   countries: AtlasCountry[];
   budgets: AtlasBudget[];
   conflicts: AtlasConflict[];
   installations: AtlasInstallation[];
   installationsError: string | null;
+  incidents: HybridWarfareIncident[];
+  incidentsError: string | null;
 }
 
 export default function WorldAtlas({
@@ -52,6 +76,8 @@ export default function WorldAtlas({
   conflicts,
   installations,
   installationsError,
+  incidents,
+  incidentsError,
 }: WorldAtlasProps) {
   const router = useRouter();
 
@@ -59,12 +85,15 @@ export default function WorldAtlas({
   const [transform, setTransform] = useState({ k: 1, x: 0, y: 0 });
   const dragRef = useRef<{ px: number; py: number } | null>(null);
   const draggedRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   /* Hover + layers */
-  const [hover, setHover] = useState<{ jf: JoinedFeature; x: number; y: number } | null>(null);
+  const [hover, setHover] = useState<HoverState | null>(null);
   const [showSatellites, setShowSatellites] = useState(true);
   const [showInstallations, setShowInstallations] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [showHybrid, setShowHybrid] = useState(true);
+  const [hybridStatusFilter, setHybridStatusFilter] = useState<string>("all");
 
   /* ── Data joins (all derived from props — nothing hardcoded) ── */
 
@@ -75,6 +104,22 @@ export default function WorldAtlas({
     }
     return map;
   }, [countries]);
+
+  /* Attacked-country centroids for hybrid incident placement, derived from
+   * the vendored Natural Earth topology (the view's rows usually carry no
+   * lat/lng — broadcaster feeds rarely geolocate — and the live countries
+   * table has no centroid columns, so the map source of truth is here). */
+  const centroidByIso = useMemo(() => {
+    const map = new Map<string, { lat: number; lng: number }>();
+    for (const jf of worldFeatures) {
+      if (!jf.alpha3 || map.has(jf.alpha3)) continue;
+      const [lng, lat] = geoCentroid(jf.feature);
+      if (Number.isFinite(lng) && Number.isFinite(lat)) {
+        map.set(jf.alpha3, { lat, lng });
+      }
+    }
+    return map;
+  }, []);
 
   const latestBudgetByCountry = useMemo(() => {
     const map = new Map<number, { amount: number | null; year: number | null }>();
@@ -138,6 +183,23 @@ export default function WorldAtlas({
     [installations, typeFilter],
   );
 
+  const hybridCounts = useMemo(
+    () => ({
+      all: incidents.length,
+      verified: incidents.filter((i) => i.status === "verified").length,
+      possible: incidents.filter((i) => i.status === "possible").length,
+    }),
+    [incidents],
+  );
+
+  const filteredIncidents = useMemo(
+    () =>
+      hybridStatusFilter === "all"
+        ? incidents
+        : incidents.filter((i) => i.status === hybridStatusFilter),
+    [incidents, hybridStatusFilter],
+  );
+
   const track = useCallback(
     (jf: JoinedFeature): TrackedInfo | null => {
       if (!jf.alpha3) return null;
@@ -177,11 +239,16 @@ export default function WorldAtlas({
 
   const handleCountryMove = (e: React.MouseEvent<SVGPathElement>, jf: JoinedFeature) => {
     const rect = e.currentTarget.ownerSVGElement!.getBoundingClientRect();
-    /* Map client coords into viewBox space so the panel tracks zoom. */
+    /* Container CSS pixels: the overlay is positioned in CSS px, so viewBox
+     * units made the panel drift from the cursor whenever the rendered
+     * width differed from WIDTH (and under zoom/pan). */
     setHover({
+      kind: "country",
       jf,
-      x: ((e.clientX - rect.left) / rect.width) * WIDTH,
-      y: ((e.clientY - rect.top) / rect.height) * HEIGHT,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      cw: rect.width,
+      ch: rect.height,
     });
   };
 
@@ -189,7 +256,7 @@ export default function WorldAtlas({
     e.preventDefault();
     setTransform((t) => ({
       ...t,
-      k: Math.min(8, Math.max(1, t.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15))),
+      k: Math.min(12, Math.max(1, t.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15))),
     }));
   }, []);
 
@@ -220,11 +287,6 @@ export default function WorldAtlas({
   };
 
   /* ── Render ──────────────────────────────────────────────── */
-
-  const hoverInfo = hover ? track(hover.jf) : null;
-  const hoverName = hover
-    ? (hover.jf.feature.properties?.name ?? "Unknown")
-    : null;
 
   return (
     <div className="space-y-4">
@@ -271,6 +333,30 @@ export default function WorldAtlas({
             })}
           </select>
         )}
+        <button
+          type="button"
+          onClick={() => setShowHybrid((v) => !v)}
+          aria-pressed={showHybrid}
+          className={`rounded border px-2 py-1 font-mono transition-colors ${
+            showHybrid
+              ? "border-purple-700 bg-purple-950/50 text-purple-300"
+              : "border-slate-700 text-slate-400"
+          }`}
+        >
+          ⚠ Hybrid {showHybrid ? "ON" : "OFF"}
+        </button>
+        {showHybrid && hybridCounts.all > 0 && (
+          <select
+            value={hybridStatusFilter}
+            onChange={(e) => setHybridStatusFilter(e.target.value)}
+            aria-label="Filter hybrid incidents by status"
+            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-slate-300"
+          >
+            <option value="all">All hybrid ({hybridCounts.all})</option>
+            <option value="verified">Verified ({hybridCounts.verified})</option>
+            <option value="possible">Possible ({hybridCounts.possible})</option>
+          </select>
+        )}
         <span className="text-slate-500">
           Hover for intelligence · click to open profile · scroll to zoom · drag to pan
         </span>
@@ -285,7 +371,10 @@ export default function WorldAtlas({
         )}
       </div>
 
-      <div className="relative overflow-hidden rounded border border-slate-800 bg-slate-950">
+      <div
+        ref={containerRef}
+        className="relative overflow-hidden rounded border border-slate-800 bg-slate-950"
+      >
         <svg
           width="100%"
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -342,19 +431,41 @@ export default function WorldAtlas({
                 projection={projection}
                 zoom={transform.k}
                 onHover={(inst, x, y) => {
-                  /* Synthesise an untracked hover so the shared panel shows
-                   * the facility card via AtlasTooltip fallback + detail. */
+                  /* Facility card in the shared HTML overlay (container px). */
+                  const rect = containerRef.current?.getBoundingClientRect();
                   setHover({
-                    jf: {
-                      feature: { properties: { name: inst.name } } as never,
-                      alpha3: null,
-                    },
+                    kind: "installation",
+                    installation: inst,
                     x,
                     y,
+                    cw: rect?.width ?? WIDTH,
+                    ch: rect?.height ?? HEIGHT,
                   });
                 }}
                 onLeave={() => setHover(null)}
                 error={installationsError}
+              />
+            )}
+
+            {showHybrid && (
+              <HybridLayer
+                incidents={filteredIncidents}
+                projection={projection}
+                zoom={transform.k}
+                centroidByIso={centroidByIso}
+                onHover={(incident, x, y) => {
+                  const rect = containerRef.current?.getBoundingClientRect();
+                  setHover({
+                    kind: "incident",
+                    incident,
+                    x,
+                    y,
+                    cw: rect?.width ?? WIDTH,
+                    ch: rect?.height ?? HEIGHT,
+                  });
+                }}
+                onLeave={() => setHover(null)}
+                error={incidentsError}
               />
             )}
 
@@ -368,11 +479,25 @@ export default function WorldAtlas({
           <div
             className="pointer-events-none absolute z-20 w-64 rounded border border-slate-700 bg-slate-950/95 p-3 text-xs shadow-xl"
             style={{
-              left: Math.min(hover.x + 12, WIDTH - 270),
-              top: Math.min(hover.y + 12, HEIGHT - 200),
+              left: Math.max(4, Math.min(hover.x + 12, hover.cw - 268)),
+              top: Math.max(
+                4,
+                Math.min(hover.y + 12, hover.ch - HOVER_CARD_H[hover.kind]),
+              ),
             }}
           >
-            <AtlasTooltip info={hoverInfo} fallbackName={hoverName} />
+            {hover.kind === "country" && (
+              <AtlasTooltip
+                info={track(hover.jf)}
+                fallbackName={hover.jf.feature.properties?.name ?? null}
+              />
+            )}
+            {hover.kind === "installation" && (
+              <InstallationHoverCard installation={hover.installation} />
+            )}
+            {hover.kind === "incident" && (
+              <HybridIncidentCard incident={hover.incident} />
+            )}
           </div>
         )}
 
@@ -418,6 +543,40 @@ export default function WorldAtlas({
               })}
             </div>
           )}
+          {showHybrid && hybridCounts.all > 0 && (
+            <div className="mt-2 border-t border-slate-800 pt-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-block h-3 w-3 rounded-full"
+                  style={{ background: "#a855f7" }}
+                />
+                <span>Verified hybrid incident (filled)</span>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className="inline-block h-3 w-3 rounded-full border-2"
+                  style={{ borderColor: "#a855f7", background: "#020617" }}
+                />
+                <span>Possible — pending review (hollow)</span>
+              </div>
+              {(["military", "civilian", "dual", "unknown"] as const).map(
+                (t) => {
+                  const style = HYBRID_TARGET_STYLE[t];
+                  return (
+                    <div key={t} className="mt-1 flex items-center gap-2">
+                      <span
+                        className="inline-flex h-3 w-3 items-center justify-center rounded-full text-[8px]"
+                        style={{ background: style.color, color: "#020617" }}
+                      >
+                        {style.glyph}
+                      </span>
+                      <span>{style.label}</span>
+                    </div>
+                  );
+                },
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -426,7 +585,44 @@ export default function WorldAtlas({
         positions are propagated with SGP4 from public CelesTrak elements
         (refreshed ≤6h); operator/role attribution is a curated approximation
         of publicly documented programmes. Installations are publicly
-        documented sites with sources.
+        documented sites with sources. Hybrid-warfare incidents are
+        auto-classified candidates from European public-broadcaster feeds —
+        see the{" "}
+        <Link
+          href="/hybrid-warfare"
+          className="text-blue-500 hover:text-blue-400"
+        >
+          hybrid warfare tracker
+        </Link>{" "}
+        for the reviewed longitudinal record.
+      </p>
+    </div>
+  );
+}
+
+/** Compact facility panel for the shared HTML overlay (hover). */
+function InstallationHoverCard({
+  installation,
+}: {
+  installation: AtlasInstallation;
+}) {
+  const style =
+    INSTALLATION_TYPE_STYLE[installation.type] ??
+    INSTALLATION_TYPE_STYLE.other;
+  return (
+    <div>
+      <p className="font-medium text-slate-100">{installation.name}</p>
+      <p className="text-[10px] uppercase tracking-wider text-slate-500">
+        {style.label} · {installation.status ?? "status n/a"}
+      </p>
+      <p className="mt-1 text-slate-400">
+        {installation.country_name ?? `Country ${installation.country_id}`}
+      </p>
+      {installation.notes && (
+        <p className="mt-1 text-slate-400 line-clamp-3">{installation.notes}</p>
+      )}
+      <p className="mt-2 text-[10px] text-slate-500">
+        Click the marker for the full record and source link.
       </p>
     </div>
   );

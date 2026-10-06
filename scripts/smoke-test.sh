@@ -94,6 +94,17 @@ check "/countries/1 renders the country name" $m
 case "$c1_text" in *"Equipment inventory"*) m=0;; *) m=1;; esac
 check "/countries/1 renders the inventory section" $m
 
+# --- /hybrid-warfare: longitudinal tracker renders ---------------------------
+# Works pre- and post-migration: the header/methodology always render, while
+# rows (or the provisioning notice) depend on the 20261010 migration.
+code=$(fetch /hybrid-warfare "$TMP/hw.html")
+check "/hybrid-warfare returns 200" $([ "$code" = "200" ]; echo $?)
+hw_text=$(text_of "$TMP/hw.html")
+case "$hw_text" in *"Hybrid Warfare Tracker"*) m=0;; *) m=1;; esac
+check "/hybrid-warfare renders the tracker header" $m
+case "$hw_text" in *"Definition (sources)"*) m=0;; *) m=1;; esac
+check "/hybrid-warfare renders the methodology" $m
+
 # --- satellites: TLE cache healthy -------------------------------------------
 code=$(fetch /api/satellites/status "$TMP/status.json")
 check "/api/satellites/status returns 200" $([ "$code" = "200" ]; echo $?)

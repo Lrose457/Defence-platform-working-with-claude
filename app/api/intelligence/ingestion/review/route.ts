@@ -146,6 +146,25 @@ export async function POST(request: Request) {
         }
       }
 
+      /* Hybrid-warfare incidents materialise on BOTH decisions:
+       * approved -> status 'verified', rejected -> 'dropped' (kept for the
+       * longitudinal audit trail; see 20261010 migration). Best-effort, same
+       * contract as conflicts above. */
+      if (
+        (decision === "approved" || decision === "rejected") &&
+        queueRecord.entity_type === "hybrid_warfare_incident"
+      ) {
+        const { data: hybridCount, error: hybridError } =
+          await supabase.rpc("materialise_hybrid_incidents", {
+            p_queue_ids: [queueId],
+          });
+        if (hybridError) {
+          console.error("[ingestion-review] hybrid materialise failed:", hybridError.message);
+        } else {
+          materialised = Number(hybridCount ?? 0);
+        }
+      }
+
       return NextResponse.json({
         success: true,
         queueId,
@@ -287,6 +306,25 @@ export async function POST(request: Request) {
             console.error("[ingestion-review] bulk materialise failed:", materialiseError.message);
           } else {
             materialised = Number(materialisedCount ?? 0);
+          }
+        }
+      }
+
+      /* Bulk approve/reject of hybrid incidents materialises them too:
+       * approved -> 'verified', rejected -> 'dropped' (best-effort). */
+      if (decision === "approved" || decision === "rejected") {
+        const hybridIds = rows
+          .filter((row) => row.entity_type === "hybrid_warfare_incident")
+          .map((row) => row.id);
+        if (hybridIds.length > 0) {
+          const { data: hybridCount, error: hybridError } =
+            await supabase.rpc("materialise_hybrid_incidents", {
+              p_queue_ids: hybridIds,
+            });
+          if (hybridError) {
+            console.error("[ingestion-review] bulk hybrid materialise failed:", hybridError.message);
+          } else {
+            materialised = Number(hybridCount ?? 0);
           }
         }
       }

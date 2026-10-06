@@ -57,6 +57,7 @@ export default async function RootLayout({
                   <Link href="/analytics" className="block py-1 px-2 rounded text-blue-400 hover:text-white hover:bg-blue-900/30 transition-all font-medium">Financial Analytics</Link>
                   <Link href="/analytics/corruption" className="block py-1 px-2 rounded text-red-400 hover:text-white hover:bg-red-900/30 transition-all font-medium">Corruption Index</Link>
                   <Link href="/conflict-tracker" className="block py-1 px-2 rounded text-red-400 hover:text-red-300 hover:bg-red-900/20 transition-all font-medium">Conflict Tracker</Link>
+                  <Link href="/hybrid-warfare" className="block py-1 px-2 rounded text-purple-400 hover:text-purple-300 hover:bg-purple-900/20 transition-all font-medium">Hybrid Warfare</Link>
                   <Link href="/intelligence" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Intelligence Feed</Link>
                   <Link href="/artificial-intelligence" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">AI in Defence</Link>
                   <Link href="/analysis/alignment" className="block py-1 px-2 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Alignment Model</Link>

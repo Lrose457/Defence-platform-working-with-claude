@@ -50,6 +50,30 @@ export interface AtlasInstallation {
   country_name: string | null;
 }
 
+/** Row of the `atlas_hybrid_warfare` view (20261010 migration):
+ * verified incidents from the longitudinal table unioned with live
+ * 'possible' candidates still pending review in ingestion_queue. */
+export interface HybridWarfareIncident {
+  id: number;
+  country_id: number | null;
+  attacked_iso3: string | null;
+  attacked_name: string | null;
+  target_type: "military" | "civilian" | "dual" | null;
+  lat: number | null;
+  lng: number | null;
+  title: string;
+  summary: string | null;
+  definition_clause: string | null;
+  target_description: string | null;
+  government_response: string | null;
+  domains: string[] | null;
+  confidence_score: number | null;
+  status: "possible" | "verified";
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  source_url: string | null;
+}
+
 /** Natural Earth country feature joined to its ISO alpha3 code. */
 export type WorldFeature = Feature<Geometry, { name?: string }> & {
   id?: string | number;

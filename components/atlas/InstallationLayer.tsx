@@ -97,8 +97,23 @@ export default function InstallationLayer({
               {style.glyph}
             </text>
             {open && (
-              <foreignObject x={x + 8 / zoom} y={y - 30 / zoom} width={240} height={120}>
-                <div className="rounded border border-amber-800 bg-slate-950/95 p-2 text-[11px] shadow-xl">
+              <foreignObject
+                x={x + 8 / zoom}
+                y={y - 40 / zoom}
+                width={260 / zoom}
+                height={160 / zoom}
+              >
+                {/* Counter-scale the card so it keeps a constant screen size
+                 * at any zoom level (ceiling raised to 12 for infrastructure
+                 * inspection). */}
+                <div
+                  style={{
+                    transform: `scale(${1 / zoom})`,
+                    transformOrigin: "top left",
+                    width: 260,
+                  }}
+                  className="rounded border border-amber-800 bg-slate-950/95 p-2 text-[11px] shadow-xl"
+                >
                   <p className="font-medium text-slate-100">{inst.name}</p>
                   <p className="text-[10px] text-slate-400">
                     {style.label} · {inst.status ?? "status n/a"} ·{" "}
