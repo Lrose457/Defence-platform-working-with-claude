@@ -31,9 +31,11 @@ was not affected.
 
 1. ~~Rotate the leaked service_role key~~ — **DONE (patch 0.2)**.
 2. ~~Rotate the publishable anon key~~ — **DONE (patch 0.3)**.
-3. **Rotate the Supabase management access token** (`sbp_…`) — **STILL OPEN**.
-   supabase.com → Account → Access Tokens → generate new, revoke old. The
-   token currently in use is SQL-scoped only, but rotation is still required.
+3. ~~Rotate the Supabase management access token (`sbp_…`)~~ — the
+   SQL-scoped token documented here returned **401** on 2026-10-06, i.e. it
+   is revoked or rotated (sweep finding F12). Confirm no copies of any
+   management token remain in notes/dashboards, and treat rotation as DONE
+   once verified.
 4. Audit Supabase access logs for the window during which the key was exposed.
 
 ## Key-Rotation Runbook (patch 0.2, updated 0.3)
@@ -58,8 +60,33 @@ was not affected.
    (`git filter-repo --replace-text` + force-push, then re-clone).
 5. ~~Audit Dashboard → Logs → API for requests authenticated with the old key.~~
    No unexpected activity observed; key verified dead.
-6. Rotate the **management access token** (Account → Access Tokens). After
-   rotation, verify the old token returns 401 against `api.supabase.com`.
+6. ~~Rotate the **management access token** (Account → Access Tokens).~~
+   Observed dead (401) on 2026-10-06 — see item 3 above.
+
+## Security sweep + nightly enforcement (patch 0.5 — 2026-10-06)
+
+Full re-sweep documented in `SECURITY-AUDIT-2026-10-06.md` (weaknesses),
+`DATA-PIPELINE-AUDIT-2026-10-06.md` (report-only pipeline audit) and
+`SECURITY-PR-AUDIT-2026-10-06.md` (four-dimension audit of PRs #3/#4/#5).
+
+- **Nightly security CI** (`.github/workflows/security-nightly.yml`, 02:23 UTC
+  + manual dispatch): `scripts/security-probe.sh` asserts the entire external
+  posture (anon write denials, private-table reads, CSRF/bearer gates, admin
+  redirect, webhook non-disclosure, security headers, DB-backed limiter E2E)
+  against the production build and the deployed site (`PROD_URL` variable);
+  the Supabase security advisor is compared against an explicit allowlist of
+  accepted findings (any new finding fails the build; needs the
+  `SUPABASE_ACCESS_TOKEN` repo secret); gitleaks scans history since the
+  2026-10-07 incident cut-off.
+- **Stripe webhook error bodies genericized** — the endpoint previously
+  disclosed configuration state ("Webhook secret not configured") to
+  unauthenticated callers; details stay in server logs only.
+- **`source-map-js` bumped 1.2.1 → 1.2.2** (GHSA-68fv-2mgg-jv7q, dev-only;
+  `npm audit --omit=dev` remains clean).
+- Accepted residuals unchanged (see sweep report F4–F9): no DB-backed limits
+  on public read endpoints, fingerprint-rotatable limiter keys until
+  `TRUST_PROXY=true` behind the edge, anon-callable rate-limit RPCs (by
+  design), `ops_freshness_budgets` public read, Finnhub quota sweep surface.
 
 ## Security posture notes (patch 0.2)
 
